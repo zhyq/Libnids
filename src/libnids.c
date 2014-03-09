@@ -659,11 +659,6 @@ static void nids_function()
 			// FIXME: I think it would be batter to release element
 			// after process_tcp otherwise producer would risk reusing
 			// this buffer before it is read for the next tcp datagram.
-
-
-			/****
-			全局变量
-			****/
 			outputcount ++;
 			printf("\ntcp dequeue! output = %d\n", outputcount);
 		}
