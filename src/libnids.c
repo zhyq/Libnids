@@ -3,10 +3,6 @@
   See the file COPYING for license details.
 */
 
-<<<<<<< HEAD
-
-=======
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 #include<pthread.h>
 #include <config.h>
 #include <sys/types.h>
@@ -36,8 +32,6 @@
 #include "util.h"
 #include "nids.h"
 
-<<<<<<< HEAD
-=======
 // add: 2014-2-22
 // B-Queue
 //#define CONS_BATCH
@@ -54,7 +48,6 @@ static long discardcount;
 
 // end add
 
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 
 #ifdef HAVE_LIBGTHREAD_2_0
 #include <glib.h>
@@ -87,26 +80,22 @@ int coreNum=0;
 
 //end newadd
 
-// Íâ²¿º¯Êý
+
 extern int ip_options_compile(unsigned char *);
 extern int raw_init();
-// ÄÚ²¿º¯Êý
+
 static void nids_syslog(int, int, struct ip *, void *);
 static int nids_ip_filter(struct ip *, int);
-// ÄÚ²¿º¯ÊýÖžÕë
+
 static struct proc_node *ip_frag_procs;
 static struct proc_node *ip_procs;
 static struct proc_node *udp_procs;
-// Íâ²¿¿ÉŒûº¯ÊýÖžÕë
+
 struct proc_node *tcp_procs;
 static int linktype;
 static pcap_t *desc = NULL;
 
-<<<<<<< HEAD
-// modified 
-=======
 // modified
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 static struct nids_fifo *fifo;
 static int tcp_put = 0;
 static int tcp_get = 0;
@@ -134,11 +123,11 @@ static GError *gerror = NULL;
 #endif
 
 char nids_errbuf[PCAP_ERRBUF_SIZE];
-// pcap_pkthdrÊÇÒ»žöÊýŸÝÁŽÂ·²ãÖ¡Í·œá¹¹
-// ²Î¿Œ:http://blog.csdn.net/yaneng/article/details/4315516
-// »òÕß:http://blog.sina.com.cn/s/blog_94d26ea60100w3kt.html
+/// pcap_pkthdr��һ��������·��֡ͷ�ṹ
+// �ο�:http://blog.csdn.net/yaneng/article/details/4315516
+// ����:http://blog.sina.com.cn/s/blog_94d26ea60100w3kt.html
 struct pcap_pkthdr * nids_last_pcap_header = NULL;
-// ÖžÏò×îÐÂµÄpcap°ü
+// ָ�����µ�pcap��
 u_char *nids_last_pcap_data = NULL;
 u_int nids_linkoffset = 0;
 
@@ -156,7 +145,7 @@ char *nids_warnings[] =
 	"Invalid TCP flags"
 };
 
-// ÕâÀï¶šÒåÒ»žö nids_params±äÁ¿£¬ÆäËûÎÄŒþÒ²ÊÇ¿ÉŒûµÄ¡£
+// ���ﶨ��һ�� nids_params�����������ļ�Ҳ�ǿɼ��ġ�
 struct nids_prm nids_params =
 {
 	1040,			/* n_tcp_streams */
@@ -187,9 +176,9 @@ struct nids_prm nids_params =
 
 
 
-// Ž«ÈëÒ»žöipÊýŸÝœá¹¹£¬Ž«ÈëÒ»žöip·Ö×éµÄ³€¶È
-// ÕâÒ»žöº¯ÊýÃ»ÓÐÊµÏÖÈÎºÎ¹ŠÄÜ
-// ×ÜÊÇ·µ»Ø1
+// ����һ��ip���ݽṹ������һ��ip����ĳ���
+// ��һ������û��ʵ���κι���
+// ���Ƿ���1
 static int nids_ip_filter(struct ip *x, int len)
 {
 	(void)x;
@@ -197,7 +186,7 @@ static int nids_ip_filter(struct ip *x, int len)
 	return 1;
 }
 
-// ÕâÊÇÒ»žöÈÕÖŸ¹ÜÀíº¯Êý
+// ����һ����־��������
 static void nids_syslog(int type, int errnum, struct ip *iph, void *data)
 {
 	char saddr[20], daddr[20];
@@ -280,11 +269,7 @@ static void nids_syslog(int type, int errnum, struct ip *iph, void *data)
 /* called either directly from pcap_hand() or from cap_queue_process_thread()
  * depending on the value of nids_params.multiproc - mcree
  */
-<<<<<<< HEAD
- 
-=======
 
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 static void call_ip_frag_procs(void *data,bpf_u_int32 caplen)
 {
 	struct proc_node *i;
@@ -313,19 +298,16 @@ static void call_ip_frag_procs(void *data,bpf_u_int32 caplen)
 #define ETHERTYPE_IP 0x0800
 
 
-// Õâžöº¯ÊýÓŠžÃÊÇpcapœÓÊÕµœÒ»žö°üÖ®ºó£¬»Øµ÷µÄº¯Êý
-// Ã»ÓÐŒÓstaticËùÒÔ£¬ÊÇÒ»žöÍâ²¿¿ÉŒûµÄº¯Êý
+// �������Ӧ����pcap���յ�һ����֮�󣬻ص��ĺ���
+// û�м�static���ԣ���һ���ⲿ�ɼ��ĺ���
 /*
-	ÕâÒ»žöº¯Êý£¬ÓŠžÃÊÇpcapµÄ»Øµ÷º¯Êý£¬
-	Ã¿µ±pcap×¥µœÒ»žö°üÖ®ºó£¬ŸÍ»á»Øµ÷Õâžöº¯Êý
-*/
+	��һ��������Ӧ����pcap�Ļص�������
+	ÿ��pcapץ��һ����֮�󣬾ͻ�ص��������
+	*/
 void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 {
-<<<<<<< HEAD
-=======
 
 
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 	u_char *data_aligned;
 #ifdef HAVE_LIBGTHREAD_2_0
 	struct cap_queue_item *qitem;
@@ -341,75 +323,58 @@ void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 	 * happen only when nids_params.tcp_workarounds is non-zero;
 	 * otherwise nids_tcp_timeouts is always NULL.
 	 */
-<<<<<<< HEAD
-	 // Ê×ÏÈŒì²éÊÇ·ñÓÐtcp³¬Ê±
-=======
-	// Ê×ÏÈŒì²éÊÇ·ñÓÐtcp³¬Ê±
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
+	 // ���ȼ���Ƿ���tcp��ʱ
 	if (NULL != nids_tcp_timeouts)
 		tcp_check_timeouts(&hdr->ts);
 
-	// œ«Ž«œøÀŽµÄÊýŸÝÁŽÂ·°üÍ·ž³ÖµžøÈ«ŸÖµÄ×îÐÂpcap°üÍ·œá¹¹ÌåÖžÕë
-	// ip_fragment.cÖÐµÄipŽŠÀíº¯Êý
+// ����������������·��ͷ��ֵ��ȫ�ֵ�����pcap��ͷ�ṹ��ָ��
+	// ip_fragment.c�е�ip��������
 	nids_last_pcap_header = hdr;
-	// ÕâÊÇpcap²¶»ñµÄdata£¬ž³ÖµžøÈ«ŸÖÖžÕë
+	// ����pcap�����data����ֵ��ȫ��ָ��
 	nids_last_pcap_data = data;
-
-	// ÕâÒ»žö±äÁ¿Ã»ÓÐÊ¹ÓÃ£¬ÒÔºóÀ©Õ¹
+	// ��һ������û��ʹ�ã��Ժ���չ
 	(void)par; /* warnings... */
 
 
-	// žùŸÝÁŽœÓÀàÐÍœøÐÐŽŠÀí
+		// �����������ͽ��д���
 	switch (linktype)
 	{
 		// 10MB
 	case DLT_EN10MB:
-		// Èç¹û²¶»ñµÄ°ü³€¶È<14 (14ÊÇÊýŸÝÁŽÂ·°üÍ·ŽóÐ¡)£¬ÄÇÃŽ²»ÊÇÒ»žöÍêÕûµÄÊýŸÝÁŽÂ·°ü
-		// ²Î¿Œ: 2013ÄêÍõµÀÍøÂç95Ò³
-		// ²Î¿Œ: http://blog.csdn.net/yaneng/article/details/4315516
+			// �������İ�����<14 (14��������·��ͷ��С)����ô����һ��������������·��
+		// �ο�: 2013����������95ҳ
+		// �ο�: http://blog.csdn.net/yaneng/article/details/4315516
 		if (hdr->caplen < 14)
 			return;
-<<<<<<< HEAD
-		
-=======
 
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 		/* Only handle IP packets and 802.1Q VLAN tagged packets below. */
-		// ÕâÁœžö×ÖœÚÕýºÃÊÇtype×Ö¶Î
-		// ²Î¿Œ: 2013ÄêÍõµÀÍøÂç95Ò³
+		// �������ֽ�������type�ֶ�
+		// �ο�: 2013����������95ҳ
 		if (data[12] == 8 && data[13] == 0)
 		{
 			/* Regular ethernet */
-			// ÐÞžÄÊýŸÝÁŽÂ·²ãµÄÊýŸÝÆ«ÒÆ£¬±ê×ŒµÄÒÔÌ«ÍøÍ·ŽóÐ¡ÊÇ14B
+				// �޸�������·�������ƫ�ƣ���׼����̫��ͷ��С��14B
 			nids_linkoffset = 14;
 		}
-		// ²Î¿Œ:http://baike.baidu.com/link?url=vxhfREoPvIFmDDMvrGnsxEbOXbYmVDuD_kgColXq_gny7opbqII1M1b7-3hR1Vi1ORar1TcRi3XG9RxW0-PvVa#2
+		// �ο�:http://baike.baidu.com/link?url=vxhfREoPvIFmDDMvrGnsxEbOXbYmVDuD_kgColXq_gny7opbqII1M1b7-3hR1Vi1ORar1TcRi3XG9RxW0-PvVa#2
 		else if (data[12] == 0x81 && data[13] == 0)
 		{
 			/* Skip 802.1Q VLAN and priority information */
-			// 802.1q°üÍ·ŽóÐ¡Îª18×ÖœÚ
+			// 802.1q��ͷ��СΪ18�ֽ�
 			nids_linkoffset = 18;
 		}
 		else
 			/* non-ip frame */
 			return;
 		break;
-<<<<<<< HEAD
-		
-=======
 
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 #ifdef DLT_PRISM_HEADER
 #ifndef DLT_IEEE802_11
 #error DLT_PRISM_HEADER is defined, but DLT_IEEE802_11 is not ???
 #endif
 	case DLT_PRISM_HEADER:
 		//sizeof(prism2_hdr);
-<<<<<<< HEAD
-		nids_linkoffset = 144; 
-=======
 		nids_linkoffset = 144;
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 		linkoffset_tweaked_by_prism_code = 1;
 		//now let DLT_IEEE802_11 do the rest
 #endif
@@ -466,27 +431,23 @@ void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 		;
 	}
 
+	
 	/*-------------------------------------------------------------
-	ÖÁŽË£¬ÁŽœÓÀàÐÍÒÑŸ­ÅÐ¶ÏÍê±Ï£¬Ö÷ÒªÐÞžÄÁË likeoffsetÕâžöÈ«ŸÖ±äÁ¿
+	���ˣ����������Ѿ��ж���ϣ���Ҫ�޸��� likeoffset���ȫ�ֱ���
 	-------------------------------------------------------------*/
-	// Èç¹û²¶»ñµÄŽóÐ¡£¬±ÈÍ·»¹ÒªÐ¡£¬ÄÇÃŽÏÔÈ»ÊÇŽíÎóµÄ£¬Ö±œÓ·µ»Ø
+	// �������Ĵ�С����ͷ��ҪС����ô��Ȼ�Ǵ���ģ�ֱ�ӷ���
 	if (hdr->caplen < nids_linkoffset)
 		return;
-	// ·ñÔòŒÌÐøÍùÏÂÖŽÐÐ£¬¿ªÊŒŽŠÀíÕâžö°ü--Íš³£µÄÊÖ¶ÎŸÍÊÇ±£ŽæÏÂÀŽ
+	// �����������ִ�У���ʼ���������--ͨ�����ֶξ��Ǳ�������
 
 
-<<<<<<< HEAD
-	
-=======
-
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 	/*
 	* sure, memcpy costs. But many EXTRACT_{SHORT, LONG} macros cost, too.
 	* Anyway, libpcap tries to ensure proper layer 3 alignment (look for
 	* handle->offset in pcap sources), so memcpy should not be called.
 	*/
 #ifdef LBL_ALIGN
-	// Èç¹ûÊÇ4µÄÆæÊý±¶£¬ŸÍÖŽÐÐÏÂÃæµÄif
+		// �����4������������ִ�������if
 	if ((unsigned long) (data + nids_linkoffset) & 0x3)
 	{
 		data_aligned = alloca(hdr->caplen - nids_linkoffset + 4);
@@ -495,21 +456,14 @@ void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 	}
 	else
 #endif
-<<<<<<< HEAD
-	// Èç¹ûÃ»ÓÐ¶šÒåÉÏÃæµÄ Ô€±àÒë£¬ÄÇÃŽ
-	// ÎÞÂÛÈçºÎ¶Œ»áÖŽÐÐÏÂÃæÕâÌõÓïŸä
-	// Èç¹û¶šÒå¶øÀŽÉÏÃæµÄ Ô€±àÒë£¬ÄÇÃŽ
-	// Ö»ÓÐÔÚlinkoffsetÎª4µÄÅŒÊý±¶µÄÊ±ºò£¬²Å»áÖŽÐÐÏÂÃæÕâÌõÓïŸä
-=======
-		// Èç¹ûÃ»ÓÐ¶šÒåÉÏÃæµÄ Ô€±àÒë£¬ÄÇÃŽ
-		// ÎÞÂÛÈçºÎ¶Œ»áÖŽÐÐÏÂÃæÕâÌõÓïŸä
-		// Èç¹û¶šÒå¶øÀŽÉÏÃæµÄ Ô€±àÒë£¬ÄÇÃŽ
-		// Ö»ÓÐÔÚlinkoffsetÎª4µÄÅŒÊý±¶µÄÊ±ºò£¬²Å»áÖŽÐÐÏÂÃæÕâÌõÓïŸä
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
+		// ���û�ж�������� Ԥ���룬��ô
+	// ������ζ���ִ�������������
+	// ��������������� Ԥ���룬��ô
+	// ֻ����linkoffsetΪ4��ż������ʱ�򣬲Ż�ִ�������������
 		data_aligned = data + nids_linkoffset;
 
 #ifdef HAVE_LIBGTHREAD_2_0
-	// Èç¹ûÊÇ¶àÏß³ÌµÄ
+		// ����Ƕ��̵߳�
 	if(nids_params.multiproc)
 	{
 		/*
@@ -517,68 +471,69 @@ void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 		 * We hope that the overhead of memcpy
 		 * will be saturated by the benefits of SMP - mcree
 		 */
-		// ÉêÇëÒ»¿é¿ÕŒä£¬œ«²¶»ñµÄÄÚÈÝ±£ŽæÆðÀŽ
+			// ����һ��ռ䣬����������ݱ�������
 		qitem=malloc(sizeof(struct cap_queue_item));
-		// Èç¹ûÉêÇë³É¹Š£¬²¢ÇÒitemµÄdataÒ²ÉêÇë³É¹Š£¬ÔòÖŽÐÐif
+			// �������ɹ�������item��dataҲ����ɹ�����ִ��if
 		if (qitem && (qitem->data=malloc(hdr->caplen - nids_linkoffset)))
 		{
-			// ŒÇÂŒitemµÄ³€¶È(³öÈ¥ÊýŸÝÁŽÂ·°üÍ·)
+				// ��¼item�ĳ���(��ȥ������·��ͷ)
 			qitem->caplen=hdr->caplen - nids_linkoffset;
-			// ×¢Òâ: data_aligned ÊÇŸ­¹ý¶ÔÆëÁËµÄÊýŸÝ
-			// ¿œ±ŽÊýŸÝÁŽÂ·°üµÄÄÚÈÝ£¬µœitemµÄdataÖÐ
+		// ע��: data_aligned �Ǿ��������˵�����
+			// ����������·�������ݣ���item��data��
 			memcpy(qitem->data,data_aligned,qitem->caplen);
-			/*-------------------------------------------------------
-			ŒÓËø×Œ±žŽŠÀíqueueÖÐµÄÄÚÈÝ
+				/*-------------------------------------------------------
+			����׼������queue�е�����
 			---------------------------------------------------------*/
 			g_async_queue_lock(cap_queue);
 			/* ensure queue does not overflow */
-			// Èç¹ûŽóÓÚ¶ÓÁÐµÄ×îŽóÏÞÖÆ
+					// ������ڶ��е��������
 			if(g_async_queue_length_unlocked(cap_queue) > nids_params.queue_limit)
 			{
 				/* queue limit reached: drop packet - should we notify user via syslog? */
-				// ¶ªÆúžÕžÕÉêÇëµÄÄÚÈÝ
-				// ¿ÉÒÔÓÅ»¯µÄµØ·œ: ÏÈÅÐ¶Ï£¬ÔÙÉêÇë£¬²»ÒªŒ±×ÅÉêÇë£¬È»ºóÊÍ·Å
-				// µ«ÊÇ¿ÉÄÜŒÓËøµÄµØ·œ»á±ÈœÏŽó£¬Ó°ÏìÐ§ÂÊ£¬ÕâÀïÏÈ·Å×Å
+					// �����ո����������
+				// �����Ż��ĵط�: ���жϣ������룬��Ҫ�������룬Ȼ���ͷ�
+				// ���ǿ��ܼ����ĵط���Ƚϴ�Ӱ��Ч�ʣ������ȷ���
 				free(qitem->data);
 				free(qitem);
 			}
 			else
 			{
 				/* insert packet to queue */
-				// ŒÓÈë¶ÓÁÐ
+			// �������
 				g_async_queue_push_unlocked(cap_queue,qitem);
 			}
 			g_async_queue_unlock(cap_queue);
 			/*-------------------------------------------------------
-			ŽŠÀíÍêqueueÖÐµÄÄÚÈÝ£¬œâËø
+			������queue�е����ݣ�����
 			---------------------------------------------------------*/
 		}
-		// Èç¹ûÉêÇëÊ§°Ü£¬Ê²ÃŽ¶Œ²»×ö
-		// ÎÒÈÏÎªÐèÒªÅÐ¶ÏÒ»ÏÂ£¬ÊÇ·ñÓŠžÃÊÍ·Åqitem !!!
+				// �������ʧ�ܣ�ʲô������
+		// ����Ϊ��Ҫ�ж�һ�£��Ƿ�Ӧ���ͷ�qitem !!!
 	}
-	// ·ñÔòÊÇÓÃ»§ÒªÇóµ¥œø³Ì
+		// �������û�Ҫ�󵥽���
 	else     /* user requested simple passthru - no threading */
 	{
-		// Ö±œÓŽŠÀíipËéÆ¬
+		// ֱ�Ӵ���ip��Ƭ
 		call_ip_frag_procs(data_aligned,hdr->caplen - nids_linkoffset);
 	}
 #else
-	// ·ñÔòÖ±œÓŸÍÊÇµ¥œø³Ì(Ïß³Ì)
+		// ����ֱ�Ӿ��ǵ�����(�߳�)
 	call_ip_frag_procs(data_aligned,hdr->caplen - nids_linkoffset);
 #endif
 }
 
-// Éú³ÉIP Æ¬¶Î
-// Õâžöº¯Êý»á±»nids_pcap_handlerº¯Êýµ÷ÓÃ
-// nids_pcap_handlerÓŠžÃÊÇÒ»žöpcapµÄ»Øµ÷º¯Êý£¬Ã¿µ±ÓÐÒ»žöÊýŸÝÁŽÂ·²ãµÄ°ü
-// ±»pcap²¶»ñ£¬ŸÍ»á»Øµ÷nids_pcap_handler(Õâžöº¯ÊýµÄ¶šÒåŸÍÔÚÉÏÃæ)
+
+// ����IP Ƭ��
+// ��������ᱻnids_pcap_handler��������
+// nids_pcap_handlerӦ����һ��pcap�Ļص�������ÿ����һ��������·��İ�
+// ��pcap���񣬾ͻ�ص�nids_pcap_handler(��������Ķ����������)
 static void gen_ip_frag_proc(u_char * data, int len)
 {
 	struct proc_node *i;
 	struct ip *iph = (struct ip *) data;
 	int need_free = 0;
 	int skblen;
-	// ¶šÒåÒ»žöÖžÏòº¯ÊýµÄÖžÕë
+		// ����һ��ָ������ָ��
 	void (*glibc_syslog_h_workaround)(int, int, struct ip *, void*)=
 	    nids_params.syslog;
 
@@ -598,25 +553,21 @@ static void gen_ip_frag_proc(u_char * data, int len)
 		return;
 	}
 
-	// ipÖØ×é
-<<<<<<< HEAD
-	// ÔÚip_defrag_stubÖÐ»¹»áµ÷ÓÃ 
-=======
-	// ÔÚip_defrag_stubÖÐ»¹»áµ÷ÓÃ
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
-	// Ã¿µ±ÓÐÒ»žöÊýŸÝÁŽÂ·²ãµÄ°ü¹ýÀŽ£¬¶Œ»áŸ­¹ýÕâÀï£¬œ«ÕâžöÊýŸÝÁŽÂ·²ã
-	// µÄ°ü£¬×é×°³Éip±šÎÄ
+	// ip����
+	// ��ip_defrag_stub�л������ 
+	// ÿ����һ��������·��İ����������ᾭ����������������·��
+	// �İ�����װ��ip����
 	switch (ip_defrag_stub((struct ip *) data, &iph))
 	{
-		// ³öŽí£¬·µ»Ø
+		// ����������
 	case IPF_ISF:
 		return;
-		// »¹Ã»ÓÐ×é³ÉÒ»žöÍêÕûµÄip±šÎÄ£¬ÐèÒªžü¶àµÄipËéÆ¬
+		// ��û�����һ��������ip���ģ���Ҫ�����ip��Ƭ
 	case IPF_NOTF:
 		need_free = 0;
 		iph = (struct ip *) data;
 		break;
-		// ÒÑŸ­×é³ÉÁËÒ»žöÍêÕûµÄip±šÎÄ£¬¿ÉÒÔÊÍ·Å¿ÕŒäÁË
+		// �Ѿ������һ��������ip���ģ������ͷſռ���
 	case IPF_NEW:
 		need_free = 1;
 		break;
@@ -624,19 +575,19 @@ static void gen_ip_frag_proc(u_char * data, int len)
 		;
 	}
 
-	// ip°ü³€¶È+16
+	// ip������+16
 	skblen = ntohs(iph->ip_len) + 16;
-	// Èç¹û²»ÐèÒªÊÍ·Å£¬ÄÇÃŽŒÌÐøÐÞžÄµ±Ç°skbµÄ³€¶È£¬°ÑžÕžÕ»ñµÃµÄ°üÌíŒÓœøÀŽ
+	// �������Ҫ�ͷţ���ô�����޸ĵ�ǰskb�ĳ��ȣ��Ѹոջ�õİ����ӽ���
 	if (!need_free)
 		skblen += nids_params.dev_addon;
-	// ÕâÊÇÒ»žö+15È»ºóÇóÃþµÄ²Ù×÷£¬mod 16
+		// ����һ��+15Ȼ�������Ĳ�����mod 16
 	skblen = (skblen + 15) & ~15;
 	skblen += nids_params.sk_buff_size;
 
-	// Ñ­»·µ÷ÓÃËùÓÐÒÑŸ­±»×¢²á¹ýÁËµÄ£¬ŽŠÀí¹ØÓÚIPµÄº¯Êý
+		// ѭ�����������Ѿ���ע����˵ģ���������IP�ĺ���
 	for (i = ip_procs; i; i = i->next)
 		(i->item) (iph, skblen);
-	// Èç¹ûÐèÒªÊÍ·Å£¬ÄÇÃŽ»ØµœÓÃfreeº¯Êý
+	// �����Ҫ�ͷţ���ô�ص���free����
 	///////////////////if (need_free)
 	/////////////////////	free(iph);
 }
@@ -669,18 +620,18 @@ static void process_udp(char *data)
 		return;
 	/* According to RFC768 a checksum of 0 is not an error (Sebastien Raveau) */
 
-	// ÕâÀïœøÐÐÁËudpµÄchecksum
+	// ���������udp��checksum
 	if (udph->uh_sum && my_udp_check
 	        ((void *) udph, ulen, iph->ip_src.s_addr,
 	         iph->ip_dst.s_addr)) return;
-	// Ÿ­¹ýÁËÉÏÃæµÄcheckŒì²é£¬Èç¹ûÃ»ÓÐÎÊÌâ£¬ŸÍ»áÖŽÐÐÏÂÃæÕâÐ©ÓïŸä
+// �����������check��飬���û�����⣬�ͻ�ִ��������Щ���
 	addr.source = ntohs(udph->UH_SPORT);
 	addr.dest = ntohs(udph->UH_DPORT);
 	addr.saddr = iph->ip_src.s_addr;
 	addr.daddr = iph->ip_dst.s_addr;
 
-	// ÕâžöºÍÉÏÃæÒ»žöº¯ÊýµÄforÑ­»·ÊÇµÈŒÛµÄ
-	// ±éÀúËùÓÐÒÑŸ­×¢²áµÄupdŽŠÀíº¯Êý£¬È»ºóœøÐÐŽŠÀí
+	// ���������һ��������forѭ���ǵȼ۵�
+	// ���������Ѿ�ע���upd����������Ȼ����д���
 	while (ipp)
 	{
 		ipp->item(&addr, ((char *) udph) + sizeof(struct udphdr),
@@ -689,40 +640,6 @@ static void process_udp(char *data)
 	}
 }
 
-<<<<<<< HEAD
-// modified
-static void nids_function()
-{
-	struct fifo_node* current;
-
-	while(1)
-	{
-		if(!fifo || !fifo->head)
-			nids_exit();
-
-		//if(fifo->head == fifo->tail)
-			
-			//continue;
-		sem_wait(&sem_full);
-		current = fifo->head;
-
-		///////////////////////////
-		tcp_get++;
-		//printf("\ncore %d get:%d   pointer:%p   data:%p  len:%d \n",sched_getcpu(), tcp_get, fifo->head, fifo->head->data, fifo->head->skblen);
-
-		if (fifo->head >= fifo->end)
-		{
-			fifo->head = fifo->start;	
-		}
-		else
-		{
-			fifo->head += 1;
-		}
-
-
-		sem_post(&sem_empty);
-		process_tcp((u_char*)(current->data), current->skblen);
-=======
 
 // modified
 // This is mostly like consumer.
@@ -755,70 +672,23 @@ static void nids_function()
 			}
 			//printf("\nqueue is empty! \n");
 		}
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 	}
 }
 // end - 2014-01-25
 
 
 
-// ×îÖÕip·Ö×éÉú³Éº¯Êý
+// ����ip�������ɺ���
 // modified 2014-01-25
 static void gen_ip_proc(u_char * data, int skblen)
 {
 	struct ip *iph;
 	signed int temp;
 	iph = (struct ip *) data;
-<<<<<<< HEAD
-	
-	switch (iph->ip_p)
-	{
-	// Èç¹ûÉÏ²ãÊÇTCPÄÇÃŽŸÍµ÷ÓÃTCPŽŠÀíº¯Êý
-	case IPPROTO_TCP:
-		// modified
-		// todo:  put queue
-		if (!fifo || !fifo->head)
-			return;
-		// compute mod mask
-		
-		// if fifo is full then return;
-		//if ((fifo->head - fifo->tail == 1) || (fifo->tail - fifo->head == fifo->fifo_len - 1))
-			//return;
-		sem_wait(&sem_empty);////////////////
-		// put ip data into fifo queue
-		memcpy(fifo->tail->data, (char*)iph, skblen);
-		//fifo->tail->data = iph;
-		fifo->tail->skblen = skblen;
-
-
-		///////////////////////////
-		tcp_put++;
-		//printf("\ncore%d put:%d  pointer:%p  data:%p len:%d\n",sched_getcpu(), tcp_put, fifo->tail, fifo->tail->data, fifo->tail->skblen);
-
-		if (fifo->tail >= fifo->end)
-		{
-			fifo->tail = fifo->start;
-		}
-		else
-		{
-			fifo->tail += 1;
-		}
-		
-
-		sem_post(&sem_full);
-
-		//process_tcp(data, skblen);
-		break;
-	// Èç¹ûÉÏ²ãÊÇUDPÄÇÃŽŸÍµ÷ÓÃUDPŽŠÀíº¯Êý	
-	case IPPROTO_UDP:
-		process_udp((char *)data);
-		break;
-	// Èç¹ûÊÇICMP ...	
-=======
 
 	switch (iph->ip_p)
 	{
-		// Èç¹ûÉÏ²ãÊÇTCPÄÇÃŽŸÍµ÷ÓÃTCPŽŠÀíº¯Êý
+		// ����ϲ���TCP��ô�͵���TCP��������
 	case IPPROTO_TCP:
 		// Actually, this procedure will be called loopedly
 		// so we don't need a while here.
@@ -842,44 +712,40 @@ static void gen_ip_proc(u_char * data, int skblen)
 		}
 		
 		break;
-		// Èç¹ûÉÏ²ãÊÇUDPÄÇÃŽŸÍµ÷ÓÃUDPŽŠÀíº¯Êý
+		// ����ϲ���UDP��ô�͵���UDP��������
 	case IPPROTO_UDP:
 		process_udp((char *)data);
 		break;
-		// Èç¹ûÊÇICMP ...
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
+	// �����ICMP ...	
 	case IPPROTO_ICMP:
 		if (nids_params.n_tcp_streams)
 			process_icmp(data);
 		break;
-<<<<<<< HEAD
-	// ·ñÔòÊ²ÃŽÒ²²»×ö
-=======
-		// ·ñÔòÊ²ÃŽÒ²²»×ö
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
+	
 	default:
 		break;
 	}
 }
 
-// ³õÊŒ»¯ËùÓÐµÄ×¢²áŽŠÀíº¯Êý
+
+// ��ʼ�����е�ע�ᴦ������
 static void init_procs()
 {
-	// ÉêÇëÒ»žö¿ÕŒä
+
 	ip_frag_procs = mknew(struct proc_node);
-	// ³õÊŒ»¯¿ÕŒäÖÐµÄitemÓò
+	
 	ip_frag_procs->item = gen_ip_frag_proc;
-	// ³õÊŒ»¯¿ÕŒäÖÐµÄnextÓò
+	
 	ip_frag_procs->next = 0;
 
-	// ÉêÇëÒ»žö¿ÕŒä
+
 	ip_procs = mknew(struct proc_node);
 	ip_procs->item = gen_ip_proc;
 	ip_procs->next = 0;
 
-	// ÕâÁœžöº¯Êý¶ŒÃ»ÓÐ×¢²á
+	
 	tcp_procs = 0;
-	// Õâžöº¯ÊýÃ»ÓÐ×¢²á£¬ÔÚnids_register_udpÖÐ×¢²á(ŒûÏÂÃæ)
+	
 	udp_procs = 0;
 }
 
@@ -972,43 +838,37 @@ static int open_live()
  * pops capture queue items and feeds them to
  * the ip fragment processors - mcree
  */
-<<<<<<< HEAD
- // Õâžöº¯Êýœ«»áÊÇÄ³Ò»žöthreadµÄÈë¿Úµã£¬
- // Õâžöº¯ÊýÍê³ÉµÄ¹ŠÄÜÊÇ£¬»ñÈ¡queueÖÐµÄitemsÈ»ºó°ÑÕâÐ©itemsËÍžøËéÆ¬ŽŠÀíÕß
-=======
-// Õâžöº¯Êýœ«»áÊÇÄ³Ò»žöthreadµÄÈë¿Úµã£¬
-// Õâžöº¯ÊýÍê³ÉµÄ¹ŠÄÜÊÇ£¬»ñÈ¡queueÖÐµÄitemsÈ»ºó°ÑÕâÐ©itemsËÍžøËéÆ¬ŽŠÀíÕß
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
+// �������������ĳһ��thread����ڵ㣬
+ // ���������ɵĹ����ǣ���ȡqueue�е�itemsȻ�����Щitems�͸���Ƭ������
 static void cap_queue_process_thread()
 {
 	struct cap_queue_item *qitem;
 
 	while(1)   /* loop "forever" */
 	{
-		// Ê¹ÓÃÁËÒ»žöËø»úÖÆ£¬±£Ö€ÁËŽÓcap_queueÖÐ»ñÈ¡ÕýÈ·µÄÊýŸÝ
+				// ʹ����һ�������ƣ���֤�˴�cap_queue�л�ȡ��ȷ������
 		qitem=g_async_queue_pop(cap_queue);
 
-		// Èç¹ûœáÊøÁË£¬ÄÇÃŽŸÃÍË³öÑ­»·
+		// ��������ˣ���ô���˳�ѭ��
 		if (qitem==&EOF_item) break; /* EOF item received: we should exit */
 
-		// ·ñÔòÊ×ÏÈ±»µ÷ÓÃµÄÊÇ call_ip_frag_procs£¬
-		// call_ip_frag_procsÊÇÑ­»·µÄµ÷ÓÃ ip_frag_procsÁŽ±íÖÐµÄËùÓÐº¯Êý£¬
-		// ip_frag_procsÁŽ±íµÄ×îºóÒ»ÏîÊÇ gen_ip_frag_procº¯Êý
-		// ÓÃ»§ÌíŒÓµÄ×Ô¶šÒåº¯Êý£¬¶Œ»áŽÓip_frag_procsÁŽ±íÍ·ŒÓÈë
-		// gen_ip_frag_procº¯ÊýÊÇfragŽŠÀíµÄ×îºóÒ»»·£¬ËùÒÔÔÚgen_ip_frag_procº¯ÊýÖÐ»áÑ­»·µ÷ÓÃip_procsÁŽ±í
-		// ip_procsÁŽ±íµÄ×îºóÒ»žöœÚµãÊÇgen_ip_procº¯Êý
-		// ÓÃ»§×Ô¶šÒåµÄ¶ŒÊÇÌíŒÓÔÚip_procsÁŽ±íÍ·
-		// gen_ip_procº¯Êý»ážùŸÝÇé¿öµ÷ÓÃÉÏ²ãµÄprocess_tcp process_udp process_icmpµÈº¯Êý
-		// ÀýÈçµ÷ÓÃÁËprocess_udpº¯Êý¡£
-		// process_udpº¯Êý»áÑ­»·±éÀúudp_procsÁŽ±íÖÐµÄËùÓÐŽŠÀíudpµÄ±»ÓÃ»§×¢²áÁËµÄº¯Êý
+		// �������ȱ����õ��� call_ip_frag_procs��
+		// call_ip_frag_procs��ѭ���ĵ��� ip_frag_procs�����е����к�����
+		// ip_frag_procs���������һ���� gen_ip_frag_proc����
+		// �û����ӵ��Զ��庯���������ip_frag_procs����ͷ����
+		// gen_ip_frag_proc������frag���������һ����������gen_ip_frag_proc�����л�ѭ������ip_procs����
+		// ip_procs���������һ���ڵ���gen_ip_proc����
+		// �û��Զ���Ķ���������ip_procs����ͷ
+		// gen_ip_proc�����������������ϲ��process_tcp process_udp process_icmp�Ⱥ���
+		// ���������process_udp������
+		// process_udp������ѭ������udp_procs�����е����д���udp�ı��û�ע���˵ĺ���
 		call_ip_frag_procs(qitem->data,qitem->caplen);
 
-		// ÉÏÃæµÄº¯ÊýÖŽÐÐÍêÁËÖ®ºó£¬ŸÍ¿ÉÒÔÊÍ·Å¿ÕŒäÁË£¬È»ºóÖŽÐÐÏÂÒ»žöwhile
+				// ����ĺ���ִ������֮�󣬾Ϳ����ͷſռ��ˣ�Ȼ��ִ����һ��while
 		free(qitem->data);
 		free(qitem);
 	}
-
-	// ÍË³öºóÉ±ËÀÏß³Ì
+	// �˳���ɱ���߳�
 	g_thread_exit(NULL);
 }
 
@@ -1020,20 +880,10 @@ static void cap_queue_process_thread()
 #endif
 
 
-// ÕâÀïŸÍÊÇnidsµÄÈ«ŸÖ³õÊŒ»¯º¯Êý
+// �������nids��ȫ�ֳ�ʼ������
 int nids_init()
 {
 
-<<<<<<< HEAD
-	struct fifo_node * fifo_current;
-	char * ptr;
-	
-	///////////////////////////
-	printf("\nnids_init 001 \n");
-
-
-	
-=======
 	ELEMENT_TYPE bq_node;
 	ELEMENT_TYPE_P bq_current, bq_end;
 	char * ptr;
@@ -1042,7 +892,6 @@ int nids_init()
 	printf("\n nids_init 001 \n");
 
 
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 	/* free resources that previous usages might have allocated */
 	nids_exit();
 
@@ -1128,8 +977,7 @@ int nids_init()
 	}
 	if (nids_params.syslog == nids_syslog)
 		openlog("libnids", 0, LOG_LOCAL0);
-
-	// ×¢²áËùÓÐº¯Êý
+	// ע�����к���
 	init_procs();
 	tcp_init(nids_params.n_tcp_streams);
 	ip_frag_init(nids_params.n_hosts);
@@ -1146,63 +994,6 @@ int nids_init()
 #endif
 	}
 
-<<<<<<< HEAD
-	
-
-
-
-	//add: 2014 1 25  2
-	sem_init(&sem_full,0,0);       
-	sem_init(&sem_empty,0,FIFO_MAX);
-	//end add
-
-
-
-
-
-	// modified  2014-01-25
-	fifo = mknew(struct nids_fifo);
-	if (!fifo)
-		return 0;
-
-
-
-	fifo->fifo_len = FIFO_MAX;
-
-	fifo->tail = fifo->head = mknew_n(struct fifo_node, fifo->fifo_len);
-
-
-	fifo->start = fifo->head;
-	fifo->end = fifo->head + fifo->fifo_len - 1;
-	if ( !(fifo->tail) || !(fifo->head))
-	{
-		free(fifo);
-		return 0;
-	}
-
-
-	// allocate a buffer for fifo
-	// 65535B for each tcp datagram
-	ptr = mknew_n(char, 65535*FIFO_MAX);
-	if (!ptr)
-	{
-		return 0;
-	}
-
-
-
-	// initialize fifo_node
-	for (fifo_current = fifo->head; fifo_current <= fifo->end; fifo_current++, ptr += 65535)
-	{
-		fifo_current->data = ptr;
-		fifo_current->skblen = 0;
-	}
-			
-
-
-	// end 2014-01-25
-	
-=======
 
 
 	///////////////////////////
@@ -1269,7 +1060,6 @@ int nids_init()
 	///////////////////////////
 	printf("\n nids_init 005 \n");
 
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 	return 1;
 }
 
@@ -1277,31 +1067,19 @@ int nids_run()
 {
 
 
-	// Èç¹ûpcat_t µÄÒ»žöÖžÕëÎª¿Õ£¬ÔòÊä³öŽíÎó
+	// ���pcat_t ��һ��ָ��Ϊ�գ����������
 	if (!desc)
 	{
 		strcpy(nids_errbuf, "Libnids not initialized");
 		return 0;
 	}
-<<<<<<< HEAD
-	
-	
 
 
-	
-=======
-
-
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 	//add: thread 2014 1 25   3
 	FifoProces();
 	//end add
 
 
-<<<<<<< HEAD
-
-=======
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 	//START_CAP_QUEUE_PROCESS_THREAD(); /* threading... */
 
 	//pcap_loop(desc, -1, (pcap_handler) nids_pcap_handler, 0);
@@ -1313,25 +1091,15 @@ int nids_run()
 	nids_exit();
 	return 0;
 }
-<<<<<<< HEAD
-//newadd 2014 2 18
-void FifoProces()
-{
-	coreNum=sysconf(_SC_NPROCESSORS_CONF);//»ñÈ¡ºËÊý	
-	//printf("core num=%d\n",coreNum);
-	//tid ÓÃÀŽ±êÊŸ²»Í¬µÄÏß³ÌidºÅ£¬ÓÃÒÔ°ó¶š¶ÔÓÃµÄcpu
-	int i,tid[2]={0,1};
-=======
 
 
 //newadd 2014 2 18
 void FifoProces()
 {
-	coreNum=sysconf(_SC_NPROCESSORS_CONF);//»ñÈ¡ºËÊý
+	coreNum=sysconf(_SC_NPROCESSORS_CONF);//��ȡcpu��Ŀ
 	//printf("core num=%d\n",coreNum);
 	//tid ÓÃÀŽ±êÊŸ²»Í¬µÄÏß³ÌidºÅ£¬ÓÃÒÔ°ó¶š¶ÔÓÃµÄcpu
 	int i,tid[2]= {0,1};
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 	//thread_error=pthread_create(&th1,NULL,thread_pros1,(void*)&tid[0]);
 	thread_error=pthread_create(&th1,NULL,thread_pros1,NULL);
 	if(thread_error!=0)
@@ -1348,122 +1116,80 @@ void FifoProces()
 	}
 	pthread_join(th1,NULL);
 	pthread_join(th2,NULL);
-<<<<<<< HEAD
-	
-=======
 
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 }
 
 //end newadd
 
 //add: 2014 1 25 4
-<<<<<<< HEAD
-=======
 // running pcap_loop to capture packages from ethernet.
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 void * thread_pros1(void *arg)
 {
-	cpu_set_t mask;//cpuºËµÄŒ¯ºÏ
-	cpu_set_t get;//»ñÈ¡ÔÚŒ¯ºÏÖÐµÄcpu
+	cpu_set_t mask;
+	cpu_set_t get;
 	printf("This is the first phrase!\n");
 	//int *ar=(int *)arg;
 	//int *ar=NULL;//debug
 	//*ar=0;///debug
 	//printf("this is the %d thread\n",*ar);
-<<<<<<< HEAD
-	
-=======
 
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 	CPU_ZERO(&mask);
 	CPU_SET(0,&mask);
 	if(-1==sched_setaffinity(0,sizeof(mask),&mask))
 		printf("Faild to band %d thread on cpu\n",0);
 	//else printf("%d thread band to %d cpu successfully\n",*ar,sched_getcpu());
-<<<<<<< HEAD
-	CPU_ZERO(&get);	
-	if(sched_getaffinity(0,sizeof(get),&get)<0)
-		printf("faild get cpu source\n");
-	
-
-	//////////////////////////////////
-        coreNum=sysconf(_SC_NPROCESSORS_CONF);//获取核数
-        printf("core num=%d\n",coreNum);
-	printf("This is the first phrase!\n");
-        printf("\"pcap_get\" thread is run on %d cpu\n",sched_getcpu());
-=======
 	CPU_ZERO(&get);
 	if(sched_getaffinity(0,sizeof(get),&get)<0)
 		printf("faild get cpu source\n");
 
 
 	//////////////////////////////////
-	coreNum=sysconf(_SC_NPROCESSORS_CONF);//获取核数
+	coreNum=sysconf(_SC_NPROCESSORS_CONF);
 	printf("core num=%d\n",coreNum);
 	printf("This is the first phrase!\n");
 	printf("\"pcap_get\" thread is run on %d cpu\n",sched_getcpu());
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 	sleep(6);
 	//////////////////////////////////
 
 	pcap_loop(desc, -1, (pcap_handler) nids_pcap_handler, 0);
 	STOP_CAP_QUEUE_PROCESS_THREAD();
 
-	//todo :Ïß³ÌÎªº¯ÊýµÄÈë¿Úº¯Êý
+	//todo :
 	//gen_ip_frag_proc;
 }
 
-<<<<<<< HEAD
-=======
 // running nids_functions to trip into a dead loop
 // in the loop we tackle tcp datagrams.
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 void *thread_pros2(void * arg)
 {
-	cpu_set_t mask;//cpuºËµÄŒ¯ºÏ
-	cpu_set_t get;//»ñÈ¡ÔÚŒ¯ºÏÖÐµÄcpu
+	cpu_set_t mask;//
+	cpu_set_t get;//
 
 	//newadd 2014 2 18
 	//int *ar=(int *)arg;
 	//int *ar=NULL;
 	//*ar=1;//debug
 	//printf("this is the %d thread\n",*ar);
-<<<<<<< HEAD
-	
-=======
 
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 	CPU_ZERO(&mask);
 	CPU_SET(1,&mask);
 	if(-1==sched_setaffinity(0,sizeof(mask),&mask))
 		printf("Faild to band %d thread on cpu\n",1);
-<<<<<<< HEAD
-	CPU_ZERO(&get);	
-	if(sched_getaffinity(0,sizeof(get),&get)<0)
-		printf("faild get cpu source\n");
-		
-
-	//////////////////////////////////
-        coreNum=sysconf(_SC_NPROCESSORS_CONF);//获取核数
-        printf("core num=%d\n",coreNum);
-=======
 	CPU_ZERO(&get);
 	if(sched_getaffinity(0,sizeof(get),&get)<0)
 		printf("faild get cpu source\n");
 
 
 	//////////////////////////////////
-	coreNum=sysconf(_SC_NPROCESSORS_CONF);//获取核数
+	coreNum=sysconf(_SC_NPROCESSORS_CONF);
 	printf("core num=%d\n",coreNum);
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
 	printf("This is the second phrase!\n");
 	sleep(6);
 	//////////////////////////////////
 	//else printf("%d thread band to %d cpu successfully\n",*ar,sched_getcpu());
 	//end newadd
 	nids_function();
-	//todo :Ïß³ÌÎªµÚ¶þœ×¶ÎµÄÈë¿Úº¯Êý
+	//todo :
 	//tcp_procs;
 }
 //end add
@@ -1550,11 +1276,8 @@ int nids_dispatch(int cnt)
 	STOP_CAP_QUEUE_PROCESS_THREAD();
 	return r;
 }
-<<<<<<< HEAD
-=======
 
 
 
 
 
->>>>>>> e99896bc4af1fc1e3a12a20bfb73b269124e150c
