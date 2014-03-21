@@ -38,10 +38,13 @@
 //#define PROD_BATCH
 #include "fifo.h"
 #define TEST_SIZE 20000
-
-struct queue_t *fifo_queue;
+// add: 2014-3-21
+//struct queue_t *fifo_queue;
+#define FIFO_NUM 3
+struct queue_t *fifo_queue[FIFO_NUM];
+//
 ELEMENT_TYPE inputelement;
-ELEMENT_TYPE outputelement;
+//ELEMENT_TYPE outputelement;
 static unsigned long inputcount;
 static unsigned long outputcount;
 static long discardcount;
@@ -304,6 +307,15 @@ static void call_ip_frag_procs(void *data,bpf_u_int32 caplen)
 	这一个函数，应该是pcap的回调函数，
 	每当pcap抓到一个包之后，就会回调这个函数
 	*/
+
+/*
+struct pcap_pkthdr
+{
+      struct timeval ts;   ts是一个结构struct timeval，它有两个部分，第一部分是1900开始以来的秒数，第二部分是当前秒之后的毫秒数
+      bpf_u_int32 caplen;  表示抓到的数据长度
+      bpf_u_int32 len;    表示数据包的实际长度
+}
+*/
 void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 {
 
@@ -323,7 +335,7 @@ void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 	 * happen only when nids_params.tcp_workarounds is non-zero;
 	 * otherwise nids_tcp_timeouts is always NULL.
 	 */
-	 // 首先检查是否有tcp超时
+	// 首先检查是否有tcp超时
 	if (NULL != nids_tcp_timeouts)
 		tcp_check_timeouts(&hdr->ts);
 
@@ -336,12 +348,12 @@ void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 	(void)par; /* warnings... */
 
 
-		// 根据链接类型进行处理
+	// 根据链接类型进行处理
 	switch (linktype)
 	{
 		// 10MB
 	case DLT_EN10MB:
-			// 如果捕获的包长度<14 (14是数据链路包头大小)，那么不是一个完整的数据链路包
+		// 如果捕获的包长度<14 (14是数据链路包头大小)，那么不是一个完整的数据链路包
 		// 参考: 2013年王道网络95页
 		// 参考: http://blog.csdn.net/yaneng/article/details/4315516
 		if (hdr->caplen < 14)
@@ -353,7 +365,7 @@ void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 		if (data[12] == 8 && data[13] == 0)
 		{
 			/* Regular ethernet */
-				// 修改数据链路层的数据偏移，标准的以太网头大小是14B
+			// 修改数据链路层的数据偏移，标准的以太网头大小是14B
 			nids_linkoffset = 14;
 		}
 		// 参考:http://baike.baidu.com/link?url=vxhfREoPvIFmDDMvrGnsxEbOXbYmVDuD_kgColXq_gny7opbqII1M1b7-3hR1Vi1ORar1TcRi3XG9RxW0-PvVa#2
@@ -431,7 +443,7 @@ void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 		;
 	}
 
-	
+
 	/*-------------------------------------------------------------
 	至此，链接类型已经判断完毕，主要修改了 likeoffset这个全局变量
 	-------------------------------------------------------------*/
@@ -447,7 +459,7 @@ void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 	* handle->offset in pcap sources), so memcpy should not be called.
 	*/
 #ifdef LBL_ALIGN
-		// 如果是4的奇数倍，就执行下面的if
+	// 如果是4的奇数倍，就执行下面的if
 	if ((unsigned long) (data + nids_linkoffset) & 0x3)
 	{
 		data_aligned = alloca(hdr->caplen - nids_linkoffset + 4);
@@ -457,13 +469,13 @@ void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 	else
 #endif
 		// 如果没有定义上面的 预编译，那么
-	// 无论如何都会执行下面这条语句
-	// 如果定义而来上面的 预编译，那么
-	// 只有在linkoffset为4的偶数倍的时候，才会执行下面这条语句
+		// 无论如何都会执行下面这条语句
+		// 如果定义而来上面的 预编译，那么
+		// 只有在linkoffset为4的偶数倍的时候，才会执行下面这条语句
 		data_aligned = data + nids_linkoffset;
 
 #ifdef HAVE_LIBGTHREAD_2_0
-		// 如果是多线程的
+	// 如果是多线程的
 	if(nids_params.multiproc)
 	{
 		/*
@@ -471,26 +483,29 @@ void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 		 * We hope that the overhead of memcpy
 		 * will be saturated by the benefits of SMP - mcree
 		 */
-			// 申请一块空间，将捕获的内容保存起来
+		// 申请一块空间，将捕获的内容保存起来
 		qitem=malloc(sizeof(struct cap_queue_item));
-			// 如果申请成功，并且item的data也申请成功，则执行if
+		// 如果申请成功，并且item的data也申请成功，则执行if
 		if (qitem && (qitem->data=malloc(hdr->caplen - nids_linkoffset)))
 		{
-				// 记录item的长度(出去数据链路包头)
+			// 记录item的长度(出去数据链路包头)
 			qitem->caplen=hdr->caplen - nids_linkoffset;
-		// 注意: data_aligned 是经过对齐了的数据
+			// 注意: data_aligned 是经过对齐了的数据
 			// 拷贝数据链路包的内容，到item的data中
 			memcpy(qitem->data,data_aligned,qitem->caplen);
-				/*-------------------------------------------------------
+			/*-------------------------------------------------------
 			加锁准备处理queue中的内容
 			---------------------------------------------------------*/
+			/*********************************************************************************************/
+
+
 			g_async_queue_lock(cap_queue);
 			/* ensure queue does not overflow */
-					// 如果大于队列的最大限制
+			// 如果大于队列的最大限制
 			if(g_async_queue_length_unlocked(cap_queue) > nids_params.queue_limit)
 			{
 				/* queue limit reached: drop packet - should we notify user via syslog? */
-					// 丢弃刚刚申请的内容
+				// 丢弃刚刚申请的内容
 				// 可以优化的地方: 先判断，再申请，不要急着申请，然后释放
 				// 但是可能加锁的地方会比较大，影响效率，这里先放着
 				free(qitem->data);
@@ -499,7 +514,7 @@ void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 			else
 			{
 				/* insert packet to queue */
-			// 加入队列
+				// 加入队列
 				g_async_queue_push_unlocked(cap_queue,qitem);
 			}
 			g_async_queue_unlock(cap_queue);
@@ -507,22 +522,27 @@ void nids_pcap_handler(u_char * par, struct pcap_pkthdr *hdr, u_char * data)
 			处理完queue中的内容，解锁
 			---------------------------------------------------------*/
 		}
-				// 如果申请失败，什么都不做
+		// 如果申请失败，什么都不做
 		// 我认为需要判断一下，是否应该释放qitem !!!
 	}
-		// 否则是用户要求单进程
+	// 否则是用户要求单进程
 	else     /* user requested simple passthru - no threading */
 	{
 		// 直接处理ip碎片
 		call_ip_frag_procs(data_aligned,hdr->caplen - nids_linkoffset);
 	}
 #else
-		// 否则直接就是单进程(线程)
+	// 否则直接就是单进程(线程)
 	call_ip_frag_procs(data_aligned,hdr->caplen - nids_linkoffset);
 #endif
 }
 
-
+/*
+二层的PDU叫做Frame;
+IP的叫做Packet;
+TCP的叫做Segment；
+UDP的叫做Datagram。
+*/
 // 生成IP 片段
 // 这个函数会被nids_pcap_handler函数调用
 // nids_pcap_handler应该是一个pcap的回调函数，每当有一个数据链路层的包
@@ -533,7 +553,7 @@ static void gen_ip_frag_proc(u_char * data, int len)
 	struct ip *iph = (struct ip *) data;
 	int need_free = 0;
 	int skblen;
-		// 定义一个指向函数的指针
+	// 定义一个指向函数的指针
 	void (*glibc_syslog_h_workaround)(int, int, struct ip *, void*)=
 	    nids_params.syslog;
 
@@ -554,7 +574,7 @@ static void gen_ip_frag_proc(u_char * data, int len)
 	}
 
 	// ip重组
-	// 在ip_defrag_stub中还会调用 
+	// 在ip_defrag_stub中还会调用
 	// 每当有一个数据链路层的包过来，都会经过这里，将这个数据链路层
 	// 的包，组装成ip报文
 	switch (ip_defrag_stub((struct ip *) data, &iph))
@@ -580,11 +600,11 @@ static void gen_ip_frag_proc(u_char * data, int len)
 	// 如果不需要释放，那么继续修改当前skb的长度，把刚刚获得的包添加进来
 	if (!need_free)
 		skblen += nids_params.dev_addon;
-		// 这是一个+15然后求摸的操作，mod 16
+	// 这是一个+15然后求摸的操作，mod 16
 	skblen = (skblen + 15) & ~15;
 	skblen += nids_params.sk_buff_size;
 
-		// 循环调用所有已经被注册过了的，处理关于IP的函数
+	// 循环调用所有已经被注册过了的，处理关于IP的函数
 	for (i = ip_procs; i; i = i->next)
 		(i->item) (iph, skblen);
 	// 如果需要释放，那么回到用free函数
@@ -643,7 +663,7 @@ static void process_udp(char *data)
 
 // modified
 // This is mostly like consumer.
-static void nids_function()
+static void nids_function(int fifo_index)
 {
 
 	ELEMENT_TYPE current;
@@ -652,21 +672,22 @@ static void nids_function()
 	{
 
 		// The only thing we need to do is dequeue
-		if (SUCCESS == dequeue(fifo_queue, &current))
+		if (SUCCESS == dequeue(fifo_queue[fifo_index], &current))
 		{
 			process_tcp((u_char*)(current.data), current.skblen);
+			printf("fifo%d out\n",fifo_index);
 			// release this element
 			// FIXME: I think it would be batter to release element
 			// after process_tcp otherwise producer would risk reusing
 			// this buffer before it is read for the next tcp datagram.
-			outputcount ++;
-			printf("\ntcp dequeue! output = %d\n", outputcount);
+			//outputcount ++;
+			//printf("\ntcp dequeue! output = %d\n", outputcount);
 		}
 		// buffer is empty
 		else
 		{
 			// do nothing.
-			while(SUCCESS != dequeue(fifo_queue, &current))
+			while(SUCCESS != dequeue(fifo_queue[fifo_index], &current))
 			{
 				sleep(1);
 			}
@@ -680,48 +701,77 @@ static void nids_function()
 
 // 最终ip分组生成函数
 // modified 2014-01-25
+
+
+//copy from xuezhang
+int fifo_hash(u_char * data)
+{
+	struct ip *this_iphdr = (struct ip *)data;
+	struct tcphdr *this_tcphdr = (struct tcphdr *)(data + 4 * this_iphdr->ip_hl);
+	u_int16_t temp[6],hash;
+	int *ptr;
+	int i;
+	ptr=temp;
+	*ptr++=this_iphdr->ip_src.s_addr;
+	*ptr++=this_iphdr->ip_dst.s_addr;
+	temp[4]=this_tcphdr->th_sport;
+	temp[5]=this_tcphdr->th_dport;
+	for(i=1,hash=temp[0]; i<6; i++)
+	{
+		hash^=temp[i];
+	}
+	return ((int)hash)%(FIFO_NUM);
+}
+
 static void gen_ip_proc(u_char * data, int skblen)
 {
 	struct ip *iph;
 	signed int temp;
 	iph = (struct ip *) data;
-
+	//add:2014-3-21
+	int hash_i=fifo_hash(data);
+	//end add
 	switch (iph->ip_p)
 	{
 		// 如果上层是TCP那么就调用TCP处理函数
 	case IPPROTO_TCP:
 		// Actually, this procedure will be called loopedly
 		// so we don't need a while here.
-		
-		if (SUCCESS == enqueue(fifo_queue, (char*)iph, skblen))
+
+
+
+		if (SUCCESS == enqueue(fifo_queue[hash_i], (char*)iph, skblen))
 		{
 			// it means buffer is not totally full yet if success
-			inputcount++;
-			printf("\ntcp enqueue!, input = %d\n", inputcount);
+			//	inputcount++;
+			//printf("\ntcp enqueue!, input = %d\n", inputcount);
+			         printf("fifo%d in\n",hash_i);
+				sleep(2);
 		}
 		else
 		{
 			// wait untill equeue successfully
-			while(SUCCESS != enqueue(fifo_queue, (char*)iph, skblen))
+			while(SUCCESS != enqueue(fifo_queue[hash_i], (char*)iph, skblen))
 			{
+
 				sleep(1);
 			}
 			//printf("%d discarded!\n", discardcount);
 			//discardcount ++;
-			
+
 		}
-		
+
 		break;
 		// 如果上层是UDP那么就调用UDP处理函数
 	case IPPROTO_UDP:
 		process_udp((char *)data);
 		break;
-	// 如果是ICMP ...	
+		// 如果是ICMP ...
 	case IPPROTO_ICMP:
 		if (nids_params.n_tcp_streams)
 			process_icmp(data);
 		break;
-	
+
 	default:
 		break;
 	}
@@ -733,9 +783,9 @@ static void init_procs()
 {
 
 	ip_frag_procs = mknew(struct proc_node);
-	
+
 	ip_frag_procs->item = gen_ip_frag_proc;
-	
+
 	ip_frag_procs->next = 0;
 
 
@@ -743,9 +793,9 @@ static void init_procs()
 	ip_procs->item = gen_ip_proc;
 	ip_procs->next = 0;
 
-	
+
 	tcp_procs = 0;
-	
+
 	udp_procs = 0;
 }
 
@@ -839,14 +889,14 @@ static int open_live()
  * the ip fragment processors - mcree
  */
 // 这个函数将会是某一个thread的入口点，
- // 这个函数完成的功能是，获取queue中的items然后把这些items送给碎片处理者
+// 这个函数完成的功能是，获取queue中的items然后把这些items送给碎片处理者
 static void cap_queue_process_thread()
 {
 	struct cap_queue_item *qitem;
 
 	while(1)   /* loop "forever" */
 	{
-				// 使用了一个锁机制，保证了从cap_queue中获取正确的数据
+		// 使用了一个锁机制，保证了从cap_queue中获取正确的数据
 		qitem=g_async_queue_pop(cap_queue);
 
 		// 如果结束了，那么久退出循环
@@ -864,7 +914,7 @@ static void cap_queue_process_thread()
 		// process_udp函数会循环遍历udp_procs链表中的所有处理udp的被用户注册了的函数
 		call_ip_frag_procs(qitem->data,qitem->caplen);
 
-				// 上面的函数执行完了之后，就可以释放空间了，然后执行下一个while
+		// 上面的函数执行完了之后，就可以释放空间了，然后执行下一个while
 		free(qitem->data);
 		free(qitem);
 	}
@@ -887,7 +937,7 @@ int nids_init()
 	ELEMENT_TYPE bq_node;
 	ELEMENT_TYPE_P bq_current, bq_end;
 	char * ptr;
-
+	int fifo_i;
 	///////////////////////////
 	printf("\n nids_init 001 \n");
 
@@ -1000,63 +1050,68 @@ int nids_init()
 	printf("\n nids_init 002 \n");
 
 	// init
-	fifo_queue = mknew(struct queue_t);
-	if (!fifo_queue)
+	for(fifo_i=0; fifo_i<FIFO_NUM; fifo_i++)
 	{
-		return 0;	
-	}
-	// set fifo_queue with '0'
-	queue_init(fifo_queue);
-	inputcount = 0;
-	outputcount = 0;
-	discardcount = 0;
+		fifo_queue[fifo_i] = mknew(struct queue_t);
+		if (!fifo_queue[fifo_i])
+		{
+			return 0;
+		}
+		// set fifo_queue with '0'
 
-	///////////////////////////
-	printf("\n nids_init 003 \n");
+		queue_init(fifo_queue[fifo_i]);
+
+
+		/////////////////////////////
+		//inputcount = 0;
+		//outputcount = 0;
+		//discardcount = 0;
+
+		///////////////////////////
+		printf("\n nids_init 003 \n");
 
 #if 0
-	// init element for fifo_queue->data
-	fifo_node_p = mknew_n(struct fifo_node, QUEUE_SIZE);
-	if (!fifo_node_p)
-	{
-		free(fifo_queue);
-		return 0;
-	}
-	buf_end = fifo_queue->data + QUEUE_SIZE;
-	for (buf_current = fifo_queue->data; buf_current < buf_end; buf_current++, fifo_node_p ++)
-	{
-		(*buf_current) = fifo_node_p;
-	}
+		// init element for fifo_queue->data
+		fifo_node_p = mknew_n(struct fifo_node, QUEUE_SIZE);
+		if (!fifo_node_p)
+		{
+			free(fifo_queue);
+			return 0;
+		}
+		buf_end = fifo_queue->data + QUEUE_SIZE;
+		for (buf_current = fifo_queue->data; buf_current < buf_end; buf_current++, fifo_node_p ++)
+		{
+			(*buf_current) = fifo_node_p;
+		}
 #endif
 
+		// allocate a buffer for tcp data.
+		// 65535B for each tcp datagram.
+		ptr = mknew_n(char, 65535*QUEUE_SIZE);
+		if (!ptr)
+		{
+			free(fifo_queue[fifo_i]);
+			return 0;
+		}
 
-	// allocate a buffer for tcp data.
-	// 65535B for each tcp datagram.
-	ptr = mknew_n(char, 65535*QUEUE_SIZE);
-	if (!ptr)
-	{
-		free(fifo_queue);
-		return 0;
+		///////////////////////////
+		printf("\n nids_init 004 \n");
+
+		// Initialize fifo_node
+		// Eache node has a point, 'data', pointing to a buffer.
+		// There are 65535 buffers but they are allocated at a time
+		// referenced by 'ptr'.
+		bq_end = fifo_queue[fifo_i]->data + QUEUE_SIZE;
+		for (bq_current = fifo_queue[fifo_i]->data; bq_current < bq_end;
+		        bq_current++, ptr += 65535)
+		{
+			////////////////////////////////////
+			//printf("bq_end=0x%p, data=0x%p, bq_current=0x%p \n", bq_end, fifo_queue->data, bq_current);
+			bq_current->data = ptr;
+			bq_current->skblen = -1;
+		}
+
 	}
-
-	///////////////////////////
-	printf("\n nids_init 004 \n");
-
-	// Initialize fifo_node
-	// Eache node has a point, 'data', pointing to a buffer.
-	// There are 65535 buffers but they are allocated at a time
-	// referenced by 'ptr'.
-	bq_end = fifo_queue->data + QUEUE_SIZE;
-	for (bq_current = fifo_queue->data; bq_current < bq_end;
-			bq_current++, ptr += 65535)
-	{
-		////////////////////////////////////
-		//printf("bq_end=0x%p, data=0x%p, bq_current=0x%p \n", bq_end, fifo_queue->data, bq_current);
-		bq_current->data = ptr;
-		bq_current->skblen = -1;
-	}
-
-
 	///////////////////////////
 	printf("\n nids_init 005 \n");
 
@@ -1101,21 +1156,35 @@ void FifoProces()
 	//tid 脫脙脌沤卤锚脢鸥虏禄脥卢碌脛脧脽鲁脤id潞脜拢卢脫脙脪脭掳贸露拧露脭脫脙碌脛cpu
 	int i,tid[2]= {0,1};
 	//thread_error=pthread_create(&th1,NULL,thread_pros1,(void*)&tid[0]);
-	thread_error=pthread_create(&th1,NULL,thread_pros1,NULL);
+	thread_error=pthread_create(&th_catch,NULL,thCatch,NULL);
 	if(thread_error!=0)
 	{
 		sprintf("error:%s\n",strerror(thread_error));
 		return 0;
 	}
 	//thread_error=pthread_create(&th2,NULL,thread_pros2,(void*)&tid[1]);
-	thread_error=pthread_create(&th2,NULL,thread_pros2,NULL);
+	thread_error=pthread_create(&th_pro1,NULL,thPro1,NULL);
 	if(thread_error!=0)
 	{
 		sprintf("error:%s\n",strerror(thread_error));
 		return 0;
 	}
-	pthread_join(th1,NULL);
-	pthread_join(th2,NULL);
+	thread_error=pthread_create(&th_pro2,NULL,thPro2,NULL);
+	if(thread_error!=0)
+	{
+		sprintf("error:%s\n",strerror(thread_error));
+		return 0;
+	}
+	thread_error=pthread_create(&th_pro3,NULL,thPro3,NULL);
+	if(thread_error!=0)
+	{
+		sprintf("error:%s\n",strerror(thread_error));
+		return 0;
+	}
+	pthread_join(th_catch,NULL);
+	pthread_join(th_pro1,NULL);
+	pthread_join(th_pro2,NULL);
+	pthread_join(th_pro3,NULL);
 
 }
 
@@ -1123,7 +1192,7 @@ void FifoProces()
 
 //add: 2014 1 25 4
 // running pcap_loop to capture packages from ethernet.
-void * thread_pros1(void *arg)
+void * thCatch(void *arg)
 {
 	cpu_set_t mask;
 	cpu_set_t get;
@@ -1148,7 +1217,7 @@ void * thread_pros1(void *arg)
 	printf("core num=%d\n",coreNum);
 	printf("This is the first phrase!\n");
 	printf("\"pcap_get\" thread is run on %d cpu\n",sched_getcpu());
-	sleep(6);
+	sleep(2);
 	//////////////////////////////////
 
 	pcap_loop(desc, -1, (pcap_handler) nids_pcap_handler, 0);
@@ -1160,11 +1229,12 @@ void * thread_pros1(void *arg)
 
 // running nids_functions to trip into a dead loop
 // in the loop we tackle tcp datagrams.
-void *thread_pros2(void * arg)
+void *thPro1(void * arg)
 {
 	cpu_set_t mask;//
 	cpu_set_t get;//
-
+	printf("This is the second phrase!\n");
+	int fifo_index=0;
 	//newadd 2014 2 18
 	//int *ar=(int *)arg;
 	//int *ar=NULL;
@@ -1183,15 +1253,88 @@ void *thread_pros2(void * arg)
 	//////////////////////////////////
 	coreNum=sysconf(_SC_NPROCESSORS_CONF);
 	printf("core num=%d\n",coreNum);
-	printf("This is the second phrase!\n");
-	sleep(6);
+
+	sleep(2);
 	//////////////////////////////////
 	//else printf("%d thread band to %d cpu successfully\n",*ar,sched_getcpu());
 	//end newadd
-	nids_function();
+	nids_function(fifo_index);
 	//todo :
 	//tcp_procs;
 }
+
+
+void *thPro2(void * arg)
+{
+	cpu_set_t mask;//
+	cpu_set_t get;//
+	int fifo_index=1;
+	printf("This is the third phrase!\n");
+	//newadd 2014 2 18
+	//int *ar=(int *)arg;
+	//int *ar=NULL;
+	//*ar=1;//debug
+	//printf("this is the %d thread\n",*ar);
+
+	CPU_ZERO(&mask);
+	CPU_SET(2,&mask);
+	if(-1==sched_setaffinity(0,sizeof(mask),&mask))
+		printf("Faild to band %d thread on cpu\n",1);
+	CPU_ZERO(&get);
+	if(sched_getaffinity(0,sizeof(get),&get)<0)
+		printf("faild get cpu source\n");
+
+
+	//////////////////////////////////
+	coreNum=sysconf(_SC_NPROCESSORS_CONF);
+	printf("core num=%d\n",coreNum);
+
+	sleep(2);
+	//////////////////////////////////
+	//else printf("%d thread band to %d cpu successfully\n",*ar,sched_getcpu());
+	//end newadd
+	///////////////////////////////////
+	nids_function(fifo_index);
+	//todo :
+	//tcp_procs;
+}
+
+
+void *thPro3(void * arg)
+{
+	cpu_set_t mask;//
+	cpu_set_t get;//
+	int fifo_index=2;
+	printf("This is the fourth phrase!\n");
+	//newadd 2014 2 18
+	//int *ar=(int *)arg;
+	//int *ar=NULL;
+	//*ar=1;//debug
+	//printf("this is the %d thread\n",*ar);
+
+	CPU_ZERO(&mask);
+	CPU_SET(3,&mask);
+	if(-1==sched_setaffinity(0,sizeof(mask),&mask))
+		printf("Faild to band %d thread on cpu\n",1);
+	CPU_ZERO(&get);
+	if(sched_getaffinity(0,sizeof(get),&get)<0)
+		printf("faild get cpu source\n");
+
+
+	//////////////////////////////////
+	coreNum=sysconf(_SC_NPROCESSORS_CONF);
+	printf("core num=%d\n",coreNum);
+	nids_function(fifo_index);
+	sleep(2);
+	//////////////////////////////////
+	//else printf("%d thread band to %d cpu successfully\n",*ar,sched_getcpu());
+	//end newadd
+	//////////////////////////////////////////
+	//nids_function();
+	//todo :
+	//tcp_procs;
+}
+
 //end add
 
 void nids_exit()

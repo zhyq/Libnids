@@ -81,8 +81,6 @@ inline _Bool iselezero(ELEMENT_TYPE ele)
 	return (ele.skblen == -1);
 }
 
-
-
 int enqueue(struct queue_t * q, char* data_buf, int data_len)
 {
 	uint32_t tmp_head;
@@ -116,10 +114,8 @@ int enqueue(struct queue_t * q, char* data_buf, int data_len)
 	{
 		q->head = 0;
 	}
-
 	return SUCCESS;
 }
-
 
 static inline int backtracking(struct queue_t * q)
 {
