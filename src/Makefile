@@ -25,7 +25,7 @@ PCAPLIB		= -L/usr/local/lib -lpcap
 LNET_CFLAGS	= -D_BSD_SOURCE -D__BSD_SOURCE -D__FAVOR_BSD -DHAVE_NET_ETHERNET_H
 LNETLIB		= -lnet
 
-LIBS_CFLAGS	= $(PCAP_CFLAGS) $(LNET_CFLAGS) -I/usr/include/glib-2.0 -I/usr/lib/i386-linux-gnu/glib-2.0/include   -pthread -I/usr/include/glib-2.0 -I/usr/lib/i386-linux-gnu/glib-2.0/include  
+LIBS_CFLAGS	= $(PCAP_CFLAGS) $(LNET_CFLAGS) -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include   -pthread -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include  
 LIBS		= -lgthread-2.0 -lnsl  -lglib-2.0   -pthread -lgthread-2.0 -lrt -lglib-2.0  
 RANLIB		= ranlib
 INSTALL		= /usr/bin/install -c
@@ -59,8 +59,9 @@ allpromisc_pic.o: allpromisc.c
 	$(CC) -fPIC $(CFLAGS) -I. $(LIBS_CFLAGS) -c allpromisc.c -o $@
 hash_pic.o: hash.c
 	$(CC) -fPIC $(CFLAGS) -I. $(LIBS_CFLAGS) -c hash.c -o $@
-fifo.o: fifo.c
+fifo_pic.o: fifo.c
 	$(CC) -fPIC $(CFLAGS) -I. $(LIBS_CFLAGS) -c fifo.c -o $@
+
 
 $(LIBSTATIC): $(OBJS)
 	ar -cr $@ $(OBJS)

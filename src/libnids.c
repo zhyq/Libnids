@@ -674,7 +674,7 @@ static void nids_function(int fifo_index)
 		// The only thing we need to do is dequeue
 		if (SUCCESS == dequeue(fifo_queue[fifo_index], &current))
 		{
-			process_tcp((u_char*)(current.data), current.skblen);
+			process_tcp((u_char*)(current.data), current.skblen,fifo_index);
 			printf("fifo%d out\n",fifo_index);
 			// release this element
 			// FIXME: I think it would be batter to release element
@@ -689,7 +689,7 @@ static void nids_function(int fifo_index)
 			// do nothing.
 			while(SUCCESS != dequeue(fifo_queue[fifo_index], &current))
 			{
-				sleep(1);
+				//sleep(1);
 			}
 			//printf("\nqueue is empty! \n");
 		}
@@ -746,15 +746,15 @@ static void gen_ip_proc(u_char * data, int skblen)
 			//	inputcount++;
 			//printf("\ntcp enqueue!, input = %d\n", inputcount);
 			         printf("fifo%d in\n",hash_i);
-				sleep(2);
-		}
+				//sleep(2);
+		}	
 		else
 		{
 			// wait untill equeue successfully
 			while(SUCCESS != enqueue(fifo_queue[hash_i], (char*)iph, skblen))
 			{
 
-				sleep(1);
+				//sleep(1);
 			}
 			//printf("%d discarded!\n", discardcount);
 			//discardcount ++;
@@ -1217,7 +1217,7 @@ void * thCatch(void *arg)
 	printf("core num=%d\n",coreNum);
 	printf("This is the first phrase!\n");
 	printf("\"pcap_get\" thread is run on %d cpu\n",sched_getcpu());
-	sleep(2);
+        sleep(2);
 	//////////////////////////////////
 
 	pcap_loop(desc, -1, (pcap_handler) nids_pcap_handler, 0);

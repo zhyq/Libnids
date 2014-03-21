@@ -22,6 +22,9 @@
 #include "nids.h"
 #include "hash.h"
 
+// 定义用来处理tcp的核的个数
+#define TCP_CORE_NUM 3
+
 #if ! HAVE_TCP_STATES
 enum
 {
@@ -49,16 +52,29 @@ enum
 
 #define EXP_SEQ (snd->first_data_seq + rcv->count + rcv->urg_count)
 
+// 在libnids中定义的回调函数链表
 extern struct proc_node *tcp_procs;
 
+// 这是一个hash表，用来管理所有tcp链接
 static struct tcp_stream **tcp_stream_table;
-static struct tcp_stream *streams_pool;
-static int tcp_num = 0;
+// 记录hash表大小
 static int tcp_stream_table_size;
+// 这个链表管理了所有tcp_stream节点,无论是否free
+static struct tcp_stream *streams_pool[TCP_CORE_NUM];
+// 记录当前除了free_streams外还有几个tcp节点，记录活跃的tcp数量
+static int tcp_num[TCP_CORE_NUM];
+// 记录最多允许多少个tcp,它的值应该是 tcp_stream_table_size * 3 /4
 static int max_stream;
-static struct tcp_stream *tcp_latest = 0, *tcp_oldest = 0;
-static struct tcp_stream *free_streams;
-static struct ip *ugly_iphdr;
+// tcp_latest总是指向最后建立的tcp节点，tcp_oldest总是指向最先建立的tcp节点
+// 注意，tcp节点还有一个time链表
+// 这个数组的初始化需要在tcp_int函数中执行
+static struct tcp_stream *tcp_latest[TCP_CORE_NUM], *tcp_oldest[TCP_CORE_NUM];
+// 管理空闲的tcp节点
+static struct tcp_stream *free_streams[TCP_CORE_NUM];
+// 保存原始的ip头
+static struct ip *ugly_iphdr[TCP_CORE_NUM];
+// 保存一个超时队列，如果启用此功能，每个tcp在四次挥手后不会立即释放，
+// 而是加入该队列直到超时，该队列是按照超时计时器升序排列的。
 struct tcp_timeout *nids_tcp_timeouts = 0;
 
 
@@ -74,7 +90,7 @@ struct tcp_timeout *nids_tcp_timeouts = 0;
 		那个函数有两个参数，那个函数是在list满了的情况下将list清空。
 		而且会调用警报函数，所以需要增加一个this_tcphdr作为参数。
 
-	- By shashibici 2014/03/07
+	- Comment by shashibici 2014/03/07
 **/
 static void purge_queue(struct half_stream * h)
 {
@@ -139,9 +155,12 @@ del_tcp_closing_timeout(struct tcp_stream * a_tcp)
 
 	if (!nids_params.tcp_workarounds)
 		return;
+	// 从[nids_tcp_timeouts]中寻找包含[a_tcp]的节点
 	for (to = nids_tcp_timeouts; to; to = to->next)
+	{
 		if (to->a_tcp == a_tcp)
 			break;
+	}
 	if (!to)
 		return;
 	if (!to->prev)
@@ -154,46 +173,82 @@ del_tcp_closing_timeout(struct tcp_stream * a_tcp)
 }
 
 
+/**
+	参数:
+		a_tcp:  需要释放的tcp节点
+
+	说明:
+		本函数分为若6个骤步骤 -- 清除list、从table中摘下、清除data、从time中摘下、
+		删除所有listener、收尾工作
+		1) 执行函数purge_queue来清除所有等待确认的tcp报文(list链表中)
+		2) 从[tcp_stream_table]将tcp节点摘下来，使之不在活跃
+		3) 释放data空间(存放已经确认了的按序的tcp报文)
+		4) 将节点从time链表上摘下来
+		5) 删除该tcp的所有listener
+		6) 将这个tcp节点挂载到[free_streams]链表头，表示它现在是一个空闲的节点了。
+
+	- Comment by shashibici 2014/03/21
+	
+**/
 void
 nids_free_tcp_stream(struct tcp_stream * a_tcp)
 {
 	int hash_index = a_tcp->hash_index;
-	// 注意: 后面的代码显示，lurker_node其实就代表了a_tcp的一个listener.(本函数倒数第二部分)
+	int icore = a_tcp->icore;
+	// 注意: 后面的代码显示，lurker_node其实就代表了a_tcp的一个listener.
+	// (本函数倒数第二部分)
 	struct lurker_node *i, *j;
 
+	// 这里默认不会执行，因为没有使用workaround特性
 	del_tcp_closing_timeout(a_tcp);
-	// 首先清空该tcp两端的队列
+	// 首先清空该tcp两端的list队列，也就是把那些等待确认的报文清除
 	purge_queue(&a_tcp->server);
 	purge_queue(&a_tcp->client);
 
 	// 将当前node删除，把下一个node的prev指针指向当前node的前一个node
 	if (a_tcp->next_node)
+	{
 		a_tcp->next_node->prev_node = a_tcp->prev_node;
+	}
 	// 将当前node删除，把上一个node的next指向当前node的下一个node
 	if (a_tcp->prev_node)
+	{
 		a_tcp->prev_node->next_node = a_tcp->next_node;
+	}
 	else
+	{
 		// 如果atcp->prev_node是空的，说明已经是链表头，这是一个hash链表。
 		tcp_stream_table[hash_index] = a_tcp->next_node;
-
-	// 释放数据
+	}
+	// 释放data域的数据，该数据包含了已经确认的tcp报文
 	if (a_tcp->client.data)
+	{
 		free(a_tcp->client.data);
+	}
 	if (a_tcp->server.data)
+	{
 		free(a_tcp->server.data);
+	}
 
-	// 将a_tcp从另一条链表中摘下来
+	// 将a_tcp从time链表中摘下来
 	if (a_tcp->next_time)
+	{
 		a_tcp->next_time->prev_time = a_tcp->prev_time;
+	}
 	if (a_tcp->prev_time)
+	{
 		a_tcp->prev_time->next_time = a_tcp->next_time;
+	}
 
-	// 由这一段代码可知，每个新的tcp会加在time链表的表头。
-	if (a_tcp == tcp_oldest)
-		tcp_oldest = a_tcp->prev_time;
-	if (a_tcp == tcp_latest)
-		tcp_latest = a_tcp->next_time;
-
+	// 修改tcp_latest tcp_oldes指针
+	if (a_tcp == tcp_oldest[icore])
+	{
+		tcp_oldest[icore] = a_tcp->prev_time;
+	}
+	if (a_tcp == tcp_latest[icore])
+	{
+		tcp_latest[icore] = a_tcp->next_time;
+	}
 	// 释放所有a_tcp的listeners
 	i = a_tcp->listeners;
 	while (i)
@@ -203,21 +258,61 @@ nids_free_tcp_stream(struct tcp_stream * a_tcp)
 		i = j;
 	}
 
-	// 将a_tcp挂到free_streams的表头
-	a_tcp->next_free = free_streams;
-	free_streams = a_tcp;
+	// 将a_tcp挂到free_streams的[表头]
+	a_tcp->next_free = free_streams[icore];
+	free_streams[icore] = a_tcp;
 
-	// 全局tcp数量-1
-	tcp_num--;
+	// 当前tcp数量-1
+	tcp_num[icore]--;
 }
 
 
+/**
+	参数:
+		now :  刚刚捕获的包的时间戳
 
+	说明:
+		- 调用方法: tcp_check_timeouts(&hdr->ts);
+		- 调用时机: 在pcap抓到一个包了之后会立即调用此函数。
+
+		- 可以这样认为，libnids的[最小处理时间单位]是[一个pcap包时间间隔].
+		  也就是说，只有当libnids从pcap处接收到一个包之后才会检查libnids
+		  目前所维护的各个tcp的计时器(这些计时器由nids_tcp_tmieouts指出).
+		  这个函数的作用就是替libnids执行这样一个检查操作，而libnids只需要在
+		  合适的时机调用这个函数就行了。
+		
+		- 这个函数的执行思路是:
+			-- 首先将当前包的时间[now.tv_sec]依次与[nids_tcp_timeouts]中\
+			   各个节点的[timeout.tv_sec]相比较.
+			-- 由于[nids_tcp_timeouts]中的节点是按照[timeout.tv_sec]关键字
+			   升序排列，当遇到一个[timeout.tv_sec] > [now.tv_sec]时就可以
+			   确定之后的所有节点的[timeout.tv_sec]都不小于[now.tv_sec]，于是
+			   便可以返回了。
+			-- 如果遇到[timeout.tv_sec] <= [now.tv_sec]的节点，说明这个节点
+			   对应的tcp已经超时了(now.tv_sec代表的就是当前时间--当前包的时间)，
+			   此时需要将超时的tcp释放掉(释放之前遍历一次listeners).
+
+		- 对nids_tcp_timeouts的理解:
+			--  [nids_tcp_timeouts]链表中保存的是一个个的[timeout]节点。
+				这些节点在[add_tcp_closing_timeout]函数中被添加到
+				[nids_tcp_timeouts]链表上，按照升序的方式插入(用了for循环).
+			--  可见[nids_tcp_timeouts]链表中记录的都是已经经过四次挥手
+				而准备释放了的tcp链接们。
+			--  为什么需要搞这么一个[nids_tcp_timeouts]而不是直接释放掉
+				已经完成四次挥手的一个tcp呢?
+			--  在四次挥手后不立即删除tcp是考虑到在不久的将来，client与server
+				可能会再次请求建立一条一模一样的tcp(地址四元组完全一样的tcp)。
+				仅此而已.
+
+	- Comment by shashibici 2014/03/21
+			
+**/
 void
 tcp_check_timeouts(struct timeval *now)
 {
 
-	// tcp_timeout结构，是一个链表，该链表中的主体是a_tcp,然后还有pre、next两个链表域
+	// tcp_timeout结构，是一个链表，该链表中的主体是a_tcp,然后还有pre、next
+	// 两个链表域
 	struct tcp_timeout *to;
 	struct tcp_timeout *next;
 	struct lurker_node *i;
@@ -225,9 +320,12 @@ tcp_check_timeouts(struct timeval *now)
 	// 遍历nids_tcp_timeouts链表
 	for (to = nids_tcp_timeouts; to; to = next)
 	{
+		// 如果当前包的时间值没有超过[to]中记录的timeout值，直接返回
 		if (now->tv_sec < to->timeout.tv_sec)
 			return;
+		// 否则将[to]对应的tcp状态设置为[NIDS_TIMED_OUT]
 		to->a_tcp->nids_state = NIDS_TIMED_OUT;
+		// 将[to]所对应的tcp中所有listeners执行一遍然后释放[to]对应的tcp
 		for (i = to->a_tcp->listeners; i; i = i->next)
 			(i->item) (to->a_tcp, &i->data);
 		next = to->next;
@@ -309,10 +407,17 @@ static int get_wscale(struct tcphdr * this_tcphdr, unsigned int * ws)
 }
 
 
+/**
+	参数:
+		this_tcphdr: 指向一个tcp报文
+		this_iphdr:  指向一个ip报文，该报文已经由多个ip分组组成
+		icore:       指出当前哪一个核处理该tcp
 
-// 生成一个新的tcp节点，并且把这个节点挂到hash表上。
+	说明:
+		
+**/
 static void
-add_new_tcp(struct tcphdr * this_tcphdr, struct ip * this_iphdr)
+add_new_tcp(struct tcphdr * this_tcphdr, struct ip * this_iphdr, int icore)
 {
 	struct tcp_stream *tolink;
 	struct tcp_stream *a_tcp;
@@ -328,48 +433,55 @@ add_new_tcp(struct tcphdr * this_tcphdr, struct ip * this_iphdr)
 	hash_index = mk_hash_index(addr);
 
 	// 如果tcp的数量过多
-	if (tcp_num > max_stream)
+	if (tcp_num[icore] > max_stream)
 	{
 		// 这是一个a_tcp中的listener
 		struct lurker_node *i;
-		// 保存最老的tcp, 并且自动认为最老的tcp已经超时
-		int orig_client_state=tcp_oldest->client.state;
-		tcp_oldest->nids_state = NIDS_TIMED_OUT;
+		// 保存最老的tcp的client的状态
+		int orig_client_state=tcp_oldest[icore]->client.state;
+		// 设置最老的tcp为[时间到了，不能再待了]。
+		tcp_oldest[icore]->nids_state = NIDS_TIMED_OUT;
 		// 遍历执行这个最老的tcp中的所有listener函数
-		for (i = tcp_oldest->listeners; i; i = i->next)
-			(i->item) (tcp_oldest, &i->data);
+		for (i = tcp_oldest[icore]->listeners; i; i = i->next)
+		{
+			(i->item) (tcp_oldest[icore], &i->data);
+		}
 		// 将最老的tcp释放了(当然是需要修改time链表的)，这个函数里面tcp_num--
-		nids_free_tcp_stream(tcp_oldest);
-		// 如果这个最老的tcp不是syn挥手过了，那么提示警告
+		nids_free_tcp_stream(tcp_oldest[icore]);
+		// 如果这个最老的tcp的client没有成功发送过syn，那么server必定没有
+		// TCP_CLOSING.此时需要发出警报
 		if (orig_client_state!=TCP_SYN_SENT)
-			// tcp, tcp太多啦
-			nids_params.syslog(NIDS_WARN_TCP, NIDS_WARN_TCP_TOOMUCH, ugly_iphdr, this_tcphdr);
+		{
+			// tcp太多啦!
+			// FIXME: 为什么不用[this_iphdr]?
+			nids_params.syslog(NIDS_WARN_TCP, NIDS_WARN_TCP_TOOMUCH, ugly_iphdr[icore], this_tcphdr);
+		}
 	}
 
 	// 获得free_streams链表头
-	a_tcp = free_streams;
+	a_tcp = free_streams[icore];
 	if (!a_tcp)
 	{
 		fprintf(stderr, "gdb me ...\n");
 		pause();
 	}
 	// 将free_streams头节点取下来，并且将刚取下来的节点放在a_tcp中
-	free_streams = a_tcp->next_free;
+	free_streams[icore] = a_tcp->next_free;
 	// tcp_num数量增加
-	tcp_num++;
+	tcp_num[icore]++;
 
 	// 找到hash表项
 	tolink = tcp_stream_table[hash_index];
-	// 将a_tcp所指内存清空
+	// 将a_tcp所指内存清空，也就是将刚从[free_streams]链表头摘下来的节点清空
 	memset(a_tcp, 0, sizeof(struct tcp_stream));
 	// 初始化一个tcp链接
 	a_tcp->hash_index = hash_index;
 	a_tcp->addr = addr;
 	// client建立链接
 	a_tcp->client.state = TCP_SYN_SENT;
-	// 构造需要请求的下一个seq
+	// 更新client端的发送序号，为下一个将要发送的序号，也是server应该ACK的序号
 	a_tcp->client.seq = ntohl(this_tcphdr->th_seq) + 1;
-	// 记录下第一个序列
+	// 保存客户端第一个序列号
 	a_tcp->client.first_data_seq = a_tcp->client.seq;
 	// 记录client窗口大小
 	a_tcp->client.window = ntohs(this_tcphdr->th_win);
@@ -379,26 +491,43 @@ add_new_tcp(struct tcphdr * this_tcphdr, struct ip * this_iphdr)
 	a_tcp->client.wscale_on = get_wscale(this_tcphdr, &a_tcp->client.wscale);
 	// 设置服务器端为close
 	a_tcp->server.state = TCP_CLOSE;
+	// 设置处理的核
+	a_tcp->icore = icore;
 
 	// 将a_tcp挂载hash表对应项的链表表头，并且添加到hash中
 	a_tcp->next_node = tolink;
 	a_tcp->prev_node = 0;
+	// 记录当前时间，[nids_last_pcap_header]就是刚从pcap处获得的包
+	// 把tcp的第一个报文的时间设置为这个tcp的时间
 	a_tcp->ts = nids_last_pcap_header->ts.tv_sec;
+	// 如果该hash项已经有tcp节点了，那么挂载到它前面
 	if (tolink)
+	{
 		tolink->prev_node = a_tcp;
+	}
 	tcp_stream_table[hash_index] = a_tcp;
 
+	/**
+		注意:
+			下面这一段代码在多线程条件下很可能会产生问题。
+			因此需要设置一个数组
+
+			struct tcp_stream * tcp_latest[TCP_CORE_NUM]
+			struct tcp_stream * tcp_oldest[TCP_CORE_NUM]
+
+			每一个tcp_latest或tcp_oldest所指的链都是不同的，一个核有一个
+	**/
 	// 添加到time链表中
-	a_tcp->next_time = tcp_latest;
+	a_tcp->next_time = tcp_latest[icore];
 	a_tcp->prev_time = 0;
 	// 如果oldest是空，那么，当前就是最老的，否则不是最老的
-	if (!tcp_oldest)
-		tcp_oldest = a_tcp;
+	if (!tcp_oldest[icore])
+		tcp_oldest[icore] = a_tcp;
 	// 如果latest不为空，那么把latest前面那个设为刚才加入的这个
-	if (tcp_latest)
-		tcp_latest->prev_time = a_tcp;
+	if (tcp_latest[icore])
+		(tcp_latest[icore])->prev_time = a_tcp;
 	// 刚才加入的，设为latest
-	tcp_latest = a_tcp;
+	tcp_latest[icore] = a_tcp;
 }
 
 
@@ -417,7 +546,7 @@ add_new_tcp(struct tcphdr * this_tcphdr, struct ip * this_iphdr)
 		这个函数修改了rcv->count、rcv->count_new 和 rcv->bufsize
 		其他任何变量都没有修改，包括rcv->offset 或 rcv->urg_ptr等
 		
-	- By shashibici 2014/03/07
+	- Comment by shashibici 2014/03/07
 	
 **/
 static void
@@ -559,7 +688,7 @@ add2buf(struct half_stream * rcv, char *data, int datalen)
 		- 可以在这么说，proc_node是每一个注册函数的家，当不同的tcp需要用到同一个注册
 		  函数的时候，这些tcp就需要给注册函数一个临时的家，临时的家就是lurker_node.
 
-	- By shashibic 2014/03/07
+	- Comment by shashibic 2014/03/07
 	
 **/
 static void
@@ -628,7 +757,7 @@ ride_lurkers(struct tcp_stream * a_tcp, char mask)
 		在2、中，虽然有一个while循环，但是默认地，这个循环只会执行一次，
 		而且不鼓励将one_loop_less设为非0.
 
-	- By shashibici 2014/03/07
+	- Comment by shashibici 2014/03/07
 	
 **/
 static void
@@ -759,7 +888,7 @@ prune_listeners:
 	注:  "有效内容"是指，在确认序列之后的那些字节序内容，已经被确认了的内容
 		不算"有效内容"。
 
-	- By shashibici. 2014/03/07.
+	- Comment by shashibici. 2014/03/07.
 
 **/
 static void
@@ -922,7 +1051,7 @@ add_from_skb(struct tcp_stream * a_tcp, struct half_stream * rcv,
 		3)	接收到的报文序号大于或等于接收方上一次ack的序号，也就是说收到了一个
 			报文，该报文是等待确认的报文。
 
-	- By shashibici 2014/03/07.
+	- Comment by shashibici 2014/03/07.
 **/
 static void
 tcp_queue(struct tcp_stream * a_tcp, struct tcphdr * this_tcphdr,
@@ -1108,15 +1237,15 @@ tcp_queue(struct tcp_stream * a_tcp, struct tcphdr * this_tcphdr,
 		那个函数只有一个参数，那就是需要"净化"的半连接，那个函数不会发出报警
 		所以不需要tcp头。
 
-	- By shashibici 2014/03/07
+	- Comment by shashibici 2014/03/07
 **/
 
 static void
-prune_queue(struct half_stream * rcv, struct tcphdr * this_tcphdr)
+prune_queue(struct half_stream * rcv, struct tcphdr * this_tcphdr, int icore)
 {
 	struct skbuff *tmp, *p = rcv->list;
 
-	nids_params.syslog(NIDS_WARN_TCP, NIDS_WARN_TCP_BIGQUEUE, ugly_iphdr, this_tcphdr);
+	nids_params.syslog(NIDS_WARN_TCP, NIDS_WARN_TCP_BIGQUEUE, ugly_iphdr[icore], this_tcphdr);
 	while (p)
 	{
 		free(p->data);
@@ -1198,15 +1327,55 @@ nids_find_tcp_stream(struct tuple4 *addr)
 	return a_tcp ? a_tcp : 0;
 }
 
+/**
+	参数:
+		a_tcp: 给定一个a_tcp找到它的icore号。
 
+	返回:
+		icore号，如果成功；
+		-1，如果失败
+**/
+static int
+find_icore(struct tcp_stream * a_tcp)
+{
+	int icore;
+	struct tcp_stream *t_tcp;
+	
+	for (icore = 0; icore < TCP_CORE_NUM; icore++)
+	{
+		for (t_tcp = tcp_latest[icore]; t_tcp; t_tcp = t_tcp->next_time)
+		{
+			if (a_tcp->addr.source == t_tcp->addr.source &&
+				a_tcp->addr.dest == t_tcp->addr.dest &&
+				a_tcp->addr.saddr == t_tcp->addr.saddr &&
+				a_tcp->addr.daddr == t_tcp->addr.daddr)
+			{
+				return icore;
+			}
+		}
+	}
+	fprintf(stderr,"gdb me in find_core ...\n");
+	pause();
+	return -1;
+}
+
+/**
+	作用:
+		释放所有申请的空间，并且清空所有指针
+**/
 void tcp_exit(void)
 {
 	int i;
 	struct lurker_node *j;
 	struct tcp_stream *a_tcp, *t_tcp;
 
-	if (!tcp_stream_table || !streams_pool)
+	// [streams_pool] 中所有的元素要么全部为0，要么都不为0
+	// 因此只需要判断第一个元素即可。
+	if (!tcp_stream_table || !(streams_pool[0]))
+	{
 		return;
+	}
+	// 对每一个hash项，遍历其中的tcp链表，逐一释放
 	for (i = 0; i < tcp_stream_table_size; i++)
 	{
 		a_tcp = tcp_stream_table[i];
@@ -1219,17 +1388,26 @@ void tcp_exit(void)
 				t_tcp->nids_state = NIDS_EXITING;
 				(j->item)(t_tcp, &j->data);
 			}
+			// 每次循环释放一个tcp节点
 			nids_free_tcp_stream(t_tcp);
 		}
 	}
+	// 释放table空间
 	free(tcp_stream_table);
 	tcp_stream_table = NULL;
-	free(streams_pool);
-	streams_pool = NULL;
+	// 释放所有的tcp节点空间
+	for (i = 0; i < TCP_CORE_NUM; i++)
+	{
+		free(streams_pool[i]);
+		streams_pool[i] = NULL;
+	}
 	/* FIXME: anything else we should free? */
 	/* yes plz.. */
-	tcp_latest = tcp_oldest = NULL;
-	tcp_num = 0;
+	for (i = 0; i< TCP_CORE_NUM; i++)
+	{
+		tcp_latest[i] = tcp_oldest[i] = NULL;
+		tcp_num[i] = 0;
+	}
 }
 
 
@@ -1266,10 +1444,10 @@ void tcp_exit(void)
 //   8、在process_tcp函数中，会解析这是怎样的一个tcp，然后进行相应的操作。
 //      并且会在适当是时候调用 tcp的listeners以及 用户注册的tcp回调函数
 //
-//   - By shashibic 2014/03/07
+//   - Comment by shashibic 2014/03/07
 //
 void
-process_tcp(u_char * data, int skblen)
+process_tcp(u_char * data, int skblen, int icore)
 {
 
 	/*************   首先进行tcp报文完整性检测   ***************/
@@ -1284,7 +1462,7 @@ process_tcp(u_char * data, int skblen)
 	struct tcp_stream *a_tcp;
 	struct half_stream *snd, *rcv;
 
-	ugly_iphdr = this_iphdr;
+	ugly_iphdr[icore] = this_iphdr;
 	//ntohl()是将一个无符号长整形数从网
 	//络字节顺序转换为主机字节顺序。
 	//个人理解:因为电脑有大小端问题，这样
@@ -1337,7 +1515,7 @@ process_tcp(u_char * data, int skblen)
 		if ((this_tcphdr->th_flags & TH_SYN) &&
 		        !(this_tcphdr->th_flags & TH_ACK) &&
 		        !(this_tcphdr->th_flags & TH_RST))
-			add_new_tcp(this_tcphdr, this_iphdr);//
+			add_new_tcp(this_tcphdr, this_iphdr, icore);//
 		return;
 	}
 
@@ -1362,49 +1540,143 @@ process_tcp(u_char * data, int skblen)
 		// 如果来自client 那么就是重复的第一次握手。
 		if (from_client)
 		{
-			// if timeout since previous
+			// [nids_last_pcap_header]表示最新抓到的pcap包.
+			// 如果打开了超时功能，并且最新抓到的包超过了上一个包+时间限制,则认为最新的包超时
 			if (nids_params.tcp_flow_timeout > 0 &&
-			        (a_tcp->ts + nids_params.tcp_flow_timeout < nids_last_pcap_header->ts.tv_sec))
+			        (nids_last_pcap_header->ts.tv_sec > a_tcp->ts + nids_params.tcp_flow_timeout))
 			{
+				// 执行到这里面，说明这个包是超时了的
+				// 如果这个包既不是回应包也不是重置包，那么就手动重置。
 				if (!(this_tcphdr->th_flags & TH_ACK) && !(this_tcphdr->th_flags & TH_RST))
 				{
-
-					// cleanup previous
-					nids_free_tcp_stream(a_tcp);//释放tcp空间
-					// start new
-					add_new_tcp(this_tcphdr, this_iphdr);//加载新的tcp
+					/************
+						执行到这个if里面的条件是:
+						   有握手信号
+						&& 来自client(也就是重复发起第一次握手)
+						&& 这个包是超时的包
+						&& 没有应答信息
+						&& 没有重置信息.
+						-------
+						说明了:
+						这个包确实是一个第一次握手(因为它没有应答没有重置)，
+						但是这一个包或许在很久以前就发出来了，只是路径弯曲
+						直到现在才被收到。
+						这只能有一个解释:原来的tcp已经通过四次挥手被释放了，
+						但是a_tcp这个变量并没有立即销毁，而依然存在(这在后面
+						的代码中有体现)，我想就是为了等待这种情况的发生。
+						仔细想来，在两个端口之间，原来的tcp已经释放，一段时间
+						后又要求建立一个tcp链接，那么这个要求和可能就是[超时]
+						的一个请求(因为这个间隔是两个tcp之间的间隔，不能紧密
+						得像在一个tcp中那样，故和可能是一个[超时]的表现)。
+					************/
+					// 释放原来的tcp空间(在上一个tcp挥手完毕之后并不会
+					// 被立即释放，这从后面的代码可以看到)
+					nids_free_tcp_stream(a_tcp);
+					// 当作第一次握手一样处理，添加一个新的tcp
+					// 不用find_tcp_stream了，因为刚刚才释放，必然找不到
+					add_new_tcp(this_tcphdr, this_iphdr, icore);//加载新的tcp
 				}//end if
+
+				/***********
+					跳过上面的if直接执行这里则满足条件:
+					   有握手信号
+					&& 来自client
+					&& 这个包是超时的
+					&& 这个包有ACK 或者 这个包有RST.
+					----------
+					说明了:
+					这个包不可能是一个合法的第一次握手(因为它包含了
+					ACK或者RST)，
+					因此无论如何都会直接把它丢弃掉
+				************/
 			}
+			/*********
+				如果跳过上面的if直接执行这里则满足条件:
+				   有握手信号
+				&& 来自client的
+				&& 没有超时
+				-------
+				说明了:
+				client在很短的时间内连续发出了握手请求。
+				但是很显然，如果程序执行到这一步，这个tcp已经处理了
+				第一次握手请求(libnids在处理第一次握手请求的时候就是
+				在table中创建了一个a_tcp节点).
+				因此，直接丢弃这个请求。
+			************/
 			return;
 		}
 
-		// 否则是server的。
-		
+		/**************
+			如果跳过上面的if直接执行到这里则满足:
+			   这个包带有一个握手请求。
+			&& 这个包来自于server
+			----------
+			说明了:
+			这必然是从server端发出的一个握手请求(也有可能是超时的),
+			那么仅有的可能就是--第二次握手。
+		****************/
+
 		// 如果client 刚刚发送syn 并且 服务器没打开 并且 ACK==1 那么它是第二次握手
 		// 参考: add_new_tcp函数 和 "TCP/IP三次握手协议"
 		if (a_tcp->client.state != TCP_SYN_SENT ||
 		        a_tcp->server.state != TCP_CLOSE || !(this_tcphdr->th_flags & TH_ACK))
 			return;
 
+		/**********
+			如果执行到这里则满足:
+				这个包上有握手请求
+			&&  这个包来自于server
+			&&  client已经发送了syn
+			&&  server的tcp状态是close的
+			&&  这个包有ACK标记
+			----
+			说明了:
+			这必定是一个[第二次握手]，[第二次握手]恰好满足
+			上面的条件。	
+		**********/
 		// 当且仅当是第二次握手(来自server端)才会往下执行
-
-		// 序列不是想要的，也会返回
-		// seq 作为下一个将要发送的序号(每次更新之后会等于对方的ack)
-		// 如果不是按序发送，则返回。
+		// 根据[add_new_tcp]函数对第一次握手的处理可以看到，client.seq表示的是client
+		// 将要发送的下一个序号，如果server并不是应答以期望这个序号，说明出错了。
+		// 因为tcp此时还没建立，server不能期望之前的序号，也不能期望之后的序号。
+		// 如果出现，说明这是一个不合法的包，可能是因为网络延时，上一个周期遗留下的。
 		if (a_tcp->client.seq != ntohl(this_tcphdr->th_ack))
 			return;
-
-		// 否则不返回，执行下面语句
-		// time stemp
+		/**
+			执行到这里后，不但要满足上面的条件，而且需要满足:
+				server应答的序号恰好就是client上次发出的序号+1.
+		**/
+		/**
+			这里是将pcap最新抓到的包的时间保存在a_tcp中
+			注意，这并不是tcp的计时器，而是下层(例如数据链路层)
+			的时间.
+		**/
 		a_tcp->ts = nids_last_pcap_header->ts.tv_sec;
+		// 原来[server.state]是[TCP_CLOSE]，现在修改了
 		a_tcp->server.state = TCP_SYN_RECV;
-		// seq = y
-		a_tcp->server.seq = ntohl(this_tcphdr->th_seq) + 1;//seq+1
-		// y就是firstdata
+		// 把[server.seq]设置为server的下一个将要发送的序号，也是client下次应答的序号
+		// 当下一个server的包来临时，如果序号不对，做相应处理
+		a_tcp->server.seq = ntohl(this_tcphdr->th_seq) + 1;
+		// [server.firstdata]尽在这里做了初始化,记录的是
+		// server端的第一个序号
 		a_tcp->server.first_data_seq = a_tcp->server.seq;
-		// ack_seq = x+1
+		/*************
+			这里是保存了server端此次应答的序号(即server期待
+			client发送的下一个序号，它应该恰好等于[client.seq]).
+			在下次libnids收到一个包，并且那个包是来自client
+			的时候，会检查那个包中的[this_tcphdr->th_seq]值:
+			
+			- 如果那个包中的[this_tcphdr->th_seq] < 现在的
+			[server.ack_seq]，说明那个包已经被server确认了，
+			直接丢弃。
+
+			- 如果那个包中的[this_tcphdr->th_seq] >= 现在的
+			[server.ack_seq]，说明那个包还没有被server确认，
+			需要添加到[server.data]或者[server.list]中
+			前者保存已经按序确认了的报文，后者保存可以接受
+			但还没有确认的报文
+		***********/
 		a_tcp->server.ack_seq = ntohl(this_tcphdr->th_ack);
-		// window
+		// 保存此次server告诉client的窗口大小
 		a_tcp->server.window = ntohs(this_tcphdr->th_win);
 
 		// 
@@ -1739,7 +2011,7 @@ process_tcp(u_char * data, int skblen)
 	snd->window = ntohs(this_tcphdr->th_win);
 	// 如果接收方的内存大于65535则释放掉所有占用的内存。
 	if (rcv->rmem_alloc > 65535)
-		prune_queue(rcv, this_tcphdr);
+		prune_queue(rcv, this_tcphdr, icore);
 	// 如果没有监听者，则释放tcp连接，否则不释放。
 	if (!a_tcp->listeners)
 		nids_free_tcp_stream(a_tcp);
@@ -1765,32 +2037,122 @@ nids_unregister_tcp(void (*x))
 	unregister_callback(&tcp_procs, x);
 }
 
+/**
+	初始化所有tcp.c中需要初始化的全局变量
+
+	- Written by shashibici 2014/03/21
+**/
+static inline void
+init_tcp_globles()
+{
+	int i;
+	
+	for (i = 0; i < TCP_CORE_NUM; i++)
+	{
+		tcp_oldest[i] = 0;
+		tcp_latest[i] = 0;
+		tcp_num[0] = 0;
+	}
+}
+	
+
+/**
+	parameters:
+		size  :  spsecify the size for tcp_stream table.
+
+	returning:
+		return 0 if successful and -1 if fialed.
+
+	Note:
+		There are 4 steps.
+		- Firstly, allocate tcp_stream_table.
+		- Second, allocate "steams_pool" and add it to "free_streams".
+		- Third, initialize hash.
+		- Fourth, free "nids_tcp_timeouts" if necessary.
+
+	------------------------------------------------------------------
+	[tcp_stream_table]并不需要局部化，只需要保证每一个hash项能够占用不同
+	的cache line即可。因为不同的线程访问的必然是不同hash项。
+
+	[tcp_stream_table_size]并不需要局部化。因为它在整个项目中除了本函数内
+	会初始化，其他任何时候都是只读的。
+
+	[max_stream]并不需要局部化。因为它在整个项目中除了本函数内会初始化，
+	其他任何时候都是只读的。
+
+	[streams_pool]可以局部化
+		struct tcp_stream* streams_pools[3].
+	[free_streams]可以局部化
+		struct tcp_stream* frees_streams[3]
+	每一个核对应一个 streams_pools-frees_streams对，如此一来，需要进行
+	很多的修改。
+
+	[nids_tcp_timeouts] 不需要理会，因为libnids的运行参数告诉我们，并不需要
+	用到nids_tcp_timeouts--workarounds参数被设为0。
+	
+	- Comment by shashibici 2014/03/21
+	
+*/
 int
 tcp_init(int size)
 {
-	int i;
+	
+	int i,j;
 	struct tcp_timeout *tmp;
 
-	if (!size) return 0;
+	// 初始化本源文件中的所有全局变量
+	init_tcp_globles();
+	
+	// return if no tcp
+	if (!size) 
+		return 0;
+
+	// set tcp table size;
 	tcp_stream_table_size = size;
+	
+	// allocate a set of memory initialized with 0, as tcp_table
 	tcp_stream_table = calloc(tcp_stream_table_size, sizeof(char *));
 	if (!tcp_stream_table)
 	{
 		nids_params.no_mem("tcp_init");
 		return -1;
 	}
+
+	// set max hash factor
 	max_stream = 3 * tcp_stream_table_size / 4;
-	streams_pool = (struct tcp_stream *) malloc((max_stream + 1) * sizeof(struct tcp_stream));
-	if (!streams_pool)
+
+	// allocate tcp_stream nodes
+	for (i = 0; i < TCP_CORE_NUM; i++)
 	{
-		nids_params.no_mem("tcp_init");
-		return -1;
+		streams_pool[i] = (struct tcp_stream *) malloc((max_stream + 1) * sizeof(struct tcp_stream));
+		// 如果分配失败，那么释放掉之前已经分配了的内存
+		if (!streams_pool[i])
+		{
+			while (i > 0)
+			{
+				free(streams_pool[i-1]);
+				i--;
+			}
+			nids_params.no_mem("tcp_init");
+			return -1;
+		}
 	}
-	for (i = 0; i < max_stream; i++)
-		streams_pool[i].next_free = &(streams_pool[i + 1]);
-	streams_pool[max_stream].next_free = 0;
-	free_streams = streams_pool;
+	
+	// 为每一个核初始化一个对应的streams_pool和free_streams链表
+	for (i = 0; i < TCP_CORE_NUM; i++)
+	{
+		for (j = 0; j < max_stream; j++)
+		{
+			streams_pool[i][j].next_free = &(streams_pool[i][j + 1]);
+		}
+		streams_pool[i][max_stream].next_free = 0;
+		// 将链表放到合适的free指针上
+		free_streams[i] = streams_pool[i];
+	}
+
 	init_hash();
+
+	// free all nids_tcp_timouts
 	while (nids_tcp_timeouts)
 	{
 		tmp = nids_tcp_timeouts->next;

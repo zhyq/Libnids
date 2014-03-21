@@ -172,6 +172,7 @@ struct tcp_stream
   void *user;
   // Ê±¼ä´Á
   long ts;
+  int icore;
 };
 
 struct nids_prm
